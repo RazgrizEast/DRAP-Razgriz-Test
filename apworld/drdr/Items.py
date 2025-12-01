@@ -7,8 +7,9 @@ from Options import OptionError
 class DRItemCategory(IntEnum):
     SKIP = 0,
     EVENT = 1,
-    MISC = 2,
-    TRAP = 3,
+    CONSUMABLE = 2,
+    MISC = 3,
+    TRAP = 4,
 
 
 class DRItemData(NamedTuple):
@@ -30,8 +31,21 @@ key_item_names = {
 }
 
 
-_all_items = [DRItemData(row[0], row[1], row[2]) for row in [    
+_all_items = [DRItemData(row[0], row[1], row[2]) for row in [
+    # Events
     ("Victory", 1000, DRItemCategory.EVENT),
+
+    # Consumables (starting at dr_code 1)
+    ("Orange Juice", 1, DRItemCategory.CONSUMABLE),
+    ("Pizza", 2, DRItemCategory.CONSUMABLE),
+    ("Milk", 3, DRItemCategory.CONSUMABLE),
+    ("Coffee Creamer", 4, DRItemCategory.CONSUMABLE),
+    ("Wine", 5, DRItemCategory.CONSUMABLE),
+    ("Well Done Steak", 6, DRItemCategory.CONSUMABLE),
+    ("Yogurt", 7, DRItemCategory.CONSUMABLE),
+    ("Apple", 8, DRItemCategory.CONSUMABLE),
+    ("Pie", 9, DRItemCategory.CONSUMABLE),
+    ("Bread", 10, DRItemCategory.CONSUMABLE),
 ]]
 
 item_descriptions = {}

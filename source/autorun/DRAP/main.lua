@@ -1,3 +1,7 @@
+-- Load DRAP-specific modules
+Lookups = require("DRAP.Lookups")
+Items = require("DRAP.Items")
+
 local Archipelago = {}
 Archipelago.seed = nil
 Archipelago.slot = nil
@@ -352,7 +356,15 @@ function Archipelago.ReceiveItem(item_name, sender, is_randomized)
     local player_self = Archipelago.GetPlayer()
     local item_color = "06bda1" -- default color
     local sentToBox = is_randomized == 1 -- if randomized, it goes to box
-    
+
+    -- Get item data from lookups and give it to the player
+    local item_data = Items.GetItemByName(item_name)
+    if item_data then
+        Items.GiveItem(item_data.name, item_data.dr_code, item_data.category)
+    else
+        log.error("Could not find item data for: " .. item_name)
+    end
+
     GUI.AddReceivedItemText(item_name, item_color, tostring(AP_REF.APClient:get_player_alias(sender)), tostring(player_self.alias), sentToBox)
 end
 

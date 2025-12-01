@@ -51,24 +51,30 @@ class DRWorld(World):
         self.locked_locations = []
         self.enabled_location_categories = set()
 
-   # def generate_early(self):
+    def generate_early(self):
+        self.enabled_location_categories.add(DRLocationCategory.SURVIVOR)
+        self.enabled_location_categories.add(DRLocationCategory.LEVEL_UP)
 
     def create_regions(self):
         # Create Regions
         regions: Dict[str, Region] = {}
         regions["Menu"] = self.create_region("Menu", [])
         regions.update({region_name: self.create_region(region_name, location_tables[region_name]) for region_name in [
-            "Rooftop"
+            "Rooftop",
+            "Paradise Plaza",
+            "Level Ups"
         ]})
-        
+
         # Connect Regions
         def create_connection(from_region: str, to_region: str):
             connection = Entrance(self.player, f"{to_region}", regions[from_region])
             regions[from_region].exits.append(connection)
             connection.connect(regions[to_region])
             #print(f"Connecting {from_region} to {to_region} Using entrance: " + connection.name)
-            
+
         create_connection("Menu", "Rooftop")
+        create_connection("Rooftop", "Paradise Plaza")
+        create_connection("Menu", "Level Ups")
         
         
     # For each region, add the associated locations retrieved from the corresponding location_table
@@ -77,7 +83,7 @@ class DRWorld(World):
         #print("location table size: " + str(len(location_table)))
         for location in location_table:
             #print("Creating location: " + location.name)
-            if location.category in self.enabled_location_categories and location.category not in []:
+            if location.category in self.enabled_location_categories and location.category not in [DRLocationCategory.SURVIVOR, DRLocationCategory.LEVEL_UP]:
                 #print("Adding location: " + location.name + " with default item " + location.default_item)
                 new_location = DRLocation(
                     self.player,
@@ -87,6 +93,19 @@ class DRWorld(World):
                     self.location_name_to_id[location.name],
                     new_region
                 )
+                new_region.locations.append(new_location)
+            elif location.category in [DRLocationCategory.SURVIVOR, DRLocationCategory.LEVEL_UP]:
+                print("Adding location: " + location.name + " with default item " + location.default_item)
+                locked_item = self.create_item(location.default_item)
+                new_location = DRLocation(
+                    self.player,
+                    location.name,
+                    location.category,
+                    location.default_item,
+                    self.location_name_to_id[location.name],
+                    new_region
+                )
+                new_location.place_locked_item(locked_item)
                 new_region.locations.append(new_location)
             elif location.category == DRLocationCategory.EVENT:
                 # Remove non-randomized progression items as checks because of the use of a "filler" fake item.
@@ -180,7 +199,13 @@ class DRWorld(World):
         for region in self.multiworld.get_regions(self.player):
             for location in region.locations:
                     set_rule(location, lambda state: True)
-
+        
+        for level in range(3, 51):
+            current_level_location = f"Reach Level {level}"
+            previous_level_location = f"Reach Level {level - 1}"
+            set_rule(self.multiworld.get_location(current_level_location, self.player), lambda state, prev=previous_level_location: state.can_reach_location(prev, self.player))
+        
+        self.multiworld.completion_condition[self.player] = lambda state: state.can_reach_location("Reach Level 50", self.player)
                 
     def fill_slot_data(self) -> Dict[str, object]:
         slot_data: Dict[str, object] = {}

@@ -7,6 +7,8 @@ from .Items import DRItem
 class DRLocationCategory(IntEnum):
     SKIP = 0,
     EVENT = 1,
+    SURVIVOR = 2,
+    LEVEL_UP = 3,
 
 
 class DRLocationData(NamedTuple):
@@ -40,7 +42,9 @@ class DRLocation(Location):
         table_offset = 1000
 
         table_order = [
-            "Rooftop"
+            "Rooftop",
+            "Paradise Plaza",
+            "Level Ups"
         ]
 
         output = {}
@@ -60,9 +64,73 @@ class DRLocation(Location):
 
 # To ensure backwards compatibility, do not reorder locations or insert new ones in the middle of a list.
 location_tables = {
-    #Homeworld 1
     "Rooftop": [
-        DRLocationData("Start the game", "Victory", DRLocationCategory.EVENT),
+        # Survivors rescued from Heliport
+        DRLocationData("Rescue Jeff Meyer", "Orange Juice", DRLocationCategory.SURVIVOR),
+        DRLocationData("Rescue Natalie Meyer", "Pizza", DRLocationCategory.SURVIVOR),
+    ],
+
+    "Paradise Plaza": [
+        # Survivors rescued from Paradise Plaza
+        DRLocationData("Rescue Greg Simpson", "Milk", DRLocationCategory.SURVIVOR),
+        DRLocationData("Rescue Leah Stein", "Coffee Creamer", DRLocationCategory.SURVIVOR),
+        DRLocationData("Rescue Kindell Johnson", "Wine", DRLocationCategory.SURVIVOR),
+        DRLocationData("Rescue Beth Shrake", "Well Done Steak", DRLocationCategory.SURVIVOR),
+        DRLocationData("Rescue Cheryl Jones", "Yogurt", DRLocationCategory.SURVIVOR),
+        DRLocationData("Rescue Nathan Crabbe", "Apple", DRLocationCategory.SURVIVOR),
+    ],
+
+    "Level Ups": [
+        # Level up rewards (50 levels)
+        DRLocationData("Reach Level 2", "Pie", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 3", "Bread", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 4", "Orange Juice", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 5", "Pizza", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 6", "Milk", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 7", "Coffee Creamer", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 8", "Wine", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 9", "Well Done Steak", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 10", "Yogurt", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 11", "Apple", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 12", "Pie", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 13", "Bread", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 14", "Orange Juice", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 15", "Pizza", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 16", "Milk", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 17", "Coffee Creamer", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 18", "Wine", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 19", "Well Done Steak", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 20", "Yogurt", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 21", "Apple", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 22", "Pie", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 23", "Bread", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 24", "Orange Juice", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 25", "Pizza", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 26", "Milk", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 27", "Coffee Creamer", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 28", "Wine", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 29", "Well Done Steak", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 30", "Yogurt", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 31", "Apple", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 32", "Pie", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 33", "Bread", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 34", "Orange Juice", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 35", "Pizza", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 36", "Milk", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 37", "Coffee Creamer", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 38", "Wine", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 39", "Well Done Steak", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 40", "Yogurt", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 41", "Apple", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 42", "Pie", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 43", "Bread", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 44", "Orange Juice", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 45", "Pizza", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 46", "Milk", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 47", "Coffee Creamer", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 48", "Wine", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 49", "Well Done Steak", DRLocationCategory.LEVEL_UP),
+        DRLocationData("Reach Level 50", "Victory", DRLocationCategory.LEVEL_UP),
     ]
 }
 
