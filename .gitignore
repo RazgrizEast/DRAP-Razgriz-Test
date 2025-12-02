@@ -39,3 +39,10 @@ luac.out
 *.x86_64
 *.hex
 
+/.idea/.gitignore
+/.idea/DRAP.iml
+/.idea/material_theme_project_new.xml
+/.idea/misc.xml
+/.idea/modules.xml
+/.idea/inspectionProfiles/profiles_settings.xml
+/.idea/vcs.xml
