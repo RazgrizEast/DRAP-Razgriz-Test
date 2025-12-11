@@ -128,7 +128,7 @@ AP_BRIDGE.register_item_handler_by_name("North Plaza key", function(net_item, it
     AP.DoorSceneLock.unlock_scene("s400")
 end)
 
-AP_BRIDGE.register_item_handler_by_name("Crisip's Hardware Store key", function(net_item, item_name, sender_name)
+AP_BRIDGE.register_item_handler_by_name("Crislip's Hardware Store key", function(net_item, item_name, sender_name)
     print(string.format("[DRAP-AP] Applying progression item '%s' from %s: unlock security room",
         tostring(item_name), tostring(sender_name or "?")
     ))

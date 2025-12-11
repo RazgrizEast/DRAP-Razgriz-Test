@@ -2,6 +2,8 @@
 -- Tracks app.solid.SolidStorage.SolidSave (mSaveWork) fields for challenge-style goals
 
 local M = {}
+-- callback:
+--   function(field_name, def, index, target, prev, current, threshold_id)
 M.on_challenge_threshold = nil
 
 ------------------------------------------------
@@ -37,80 +39,95 @@ local frame_counter       = 0
 
 local CHALLENGES = {
     PlayerLevel = {
-        label   = "Player Level",
+        label   = "Reach Level",
         targets = { 50 },
+        location_ids = { "Reach Level 50" },
     },
 
     zombieKilledHandTotal = {
-        label   = "Zombies killed (hand)",
+        label   = "Zombie kills by hand",
         targets = { 100 },
+        location_ids = { "Kill 500 zombies by hand" },
     },
 
     zombieKilledVehicleTotal = {
-        label   = "Zombies killed (vehicle)",
+        label   = "Zombie Vehicle kills",
         targets = { 500 },
+        location_ids = { "Kill 500 zombies by vehicle" },
     },
 
     fullMarathonDist = {
-        label   = "Full marathon distance",
+        label   = "Walk a marathon",
         targets = {
             -- TODO: fill marathon distance thresholds (e.g. 42195)
         },
+        location_ids = { "Walk a marathon" },
     },
 
     changeClothNum = {
         label   = "Outfit changes",
         targets = { 5, 50 },
+        location_ids = { "Change into 5 new outfits", "Change into 50 new outfits" },
     },
 
     npcnum = {
         label   = "Total survivors encountered",
         targets = { 10, 50 },
+        location_ids = { "Encounter 10 survivors", "Encounter 50 survivors" },
     },
 
     NpcJoinCount = {
         label   = "Survivors joined (ever)",
         targets = { 25 },
+        location_ids = { "Get 50 survivors to join" },
     },
 
     zombieKill_1Play = {
         label   = "Zombies killed",
         targets = { 1000, 10000, 53594 },
+        location_ids = { "Kill 1000 zombies", "Kill 10000 zombies", "Zombie Genocide" },
     },
 
     secretForceKill = {
         label   = "Special forces killed",
         targets = { 10 },
+        location_ids = { "Kill 10 Special Forces },
     },
 
     foodCourtDishFlag = {
-        label   = "Food court dishes tried",
+        label   = "Food court dishes destroyed",
         targets = { 30 },
+        location_ids = { "Destroy 30 dishes in the Food Court" },
     },
 
     firedBulletCount = {
         label   = "Bullets fired",
         targets = { 300 },
+        location_ids = { "Fire 300 Bullets" },
     },
 
     ZombieRideDist = {
         label   = "Zombie ride distance",
         targets = { 50 },
+        location_ids = { "Ride zombies for 50 feet" },
     },
 
     indoorTime = {
         label   = "Indoor time",
         targets = { 300000 },
+        location_ids = { "Spend 12 hours indoors" },
     },
 
     outdoorTime = {
         label   = "Outdoor time",
         targets = { 300000 },
+        location_ids = { "Spend 12 hours outdoors" },
     },
 
     psychoKillNum = {
         label   = "Psychopaths killed",
-        targets = { 1, 10 },
+        targets = { 1, 8 },
+        location_ids = { "Kill 1 psychopath", "Kill 8 psychopaths" },
     },
 
     psychoKillBit = {
@@ -123,31 +140,37 @@ local CHALLENGES = {
     cultKillNum = {
         label   = "Cultists killed",
         targets = { 100 },
+        location_ids = { "Kill 100 cultists" },
     },
 
     parasolHitNum_1Play = {
         label   = "Parasol hits (1 play)",
         targets = { 10 },
+        location_ids = { "Hit 10 zombies with a parasol" },
     },
 
     enemyRPGKillNum = {
         label   = "RPG kills",
         targets = { 100 },
+        location_ids = { "Kill 100 zombies with an RPG" },
     },
 
     npcPhotoCount_1Play = {
         label   = "Survivor photos (1 play)",
         targets = { 10, 30 },
+        location_ids = { "Photograph 10 survivors", "Photograph 30 survivors" },
     },
 
     psychoPhotoCount_1Play = {
         label   = "Psychopath photos (1 play)",
         targets = { 4 },
+        location_ids = { "Photograph 4 psychopaths" },
     },
 
     PPPhotoCount = {
         label   = "PP stickers photographed (total)",
         targets = { 10, 100 },
+        location_ids = { "Photograph 10 PP Stickers", "Photograph all PP Stickers" },
     },
 
     PsyChoKill_total = {
@@ -160,55 +183,65 @@ local CHALLENGES = {
     NPCJoinMax = {
         label   = "Max survivors escorted at once",
         targets = { 8 },
+        location_ids = { "Escort 8 survivors at once" },
     },
 
     FemaleNPCJoinMax = {
         label   = "Max female survivors escorted at once",
         targets = { 8 },
+        location_ids = { "Frank the pimp" },
     },
 
     NPCProfileMax = {
         label   = "Survivor profiles obtained",
         targets = { 87 },
+        location_ids = { "Build a profile for 87 survivors" },
     },
 
     ResultNPCCountMax = {
         label   = "Survivors saved in result",
         targets = { 10, 50 },
+        location_ids = { "Save 10 survivors", "Save 50 survivors" },
     },
 
     PhotoPointMax = {
         label   = "Max photo PP in one shot",
         targets = { 10000 },
+        location_ids = { "Get 10000 PP in one photo" },
     },
 
     PhotoTargetMax = {
         label   = "Photo targets in one shot",
         targets = { 50 },
+        location_ids = { "Get 50 targets in one photo" },
     },
 
     FallingHeightMax = {
         label   = "Max falling height",
         targets = { 500 },
+        location_ids = { "Fall from a high height" },
     },
 
     StrikeHitMax = {
         label   = "Zombie bowling",
         targets = { 10 },
+        location_ids = { "Bowl over 10 zombies" },
     },
 
     VehicleJumpDistanceMax = {
         label   = "Vehicle jump distance",
         targets = { 50 },
+        location_ids = { "Jump a vehicle 50 feet" },
     },
 
     GolfMaxDistance = {
         label   = "Longest golf shot",
         targets = { 100 },
+        location_ids = { "Hit a golf ball 100 feet" },
     },
 }
 
--- expose so AP logic can tweak thresholds if needed
+-- expose so AP logic can tweak thresholds / add location_ids if needed
 M.CHALLENGES = CHALLENGES
 
 ------------------------------------------------
@@ -374,16 +407,33 @@ local function handle_challenge_progress(field_name, def, state, save_obj)
         for i, target in ipairs(def.targets) do
             if target ~= nil and not state.reached[i] and current >= target and prev < target then
                 local label = def.label or field_name
+
+                -- Build a per-threshold id for AP (separate "locations")
+                local threshold_id
+                if def.location_ids and def.location_ids[i] then
+                    threshold_id = def.location_ids[i]
+                else
+                    threshold_id = string.format("%s_%d", field_name, target)
+                end
+
                 log(string.format(
-                    "Challenge reached: %s >= %d (field=%s, %d -> %d)",
-                    label, target, field_name, prev, current
+                    "Challenge reached [%s]: %s >= %d (field=%s, %d -> %d)",
+                    threshold_id, label, target, field_name, prev, current
                 ))
                 state.reached[i] = true
 
-                -- AP hook
+                -- AP hook: separate location per threshold via threshold_id
                 if M.on_challenge_threshold then
-                    pcall(M.on_challenge_threshold,
-                        field_name, def, i, target, prev, current)
+                    pcall(
+                        M.on_challenge_threshold,
+                        field_name,  -- raw SolidSave field name
+                        def,         -- challenge definition table
+                        i,           -- index within def.targets
+                        target,      -- numeric target value
+                        prev,        -- previous value
+                        current,     -- new value
+                        threshold_id -- unique id for this threshold
+                    )
                 end
             end
         end
@@ -396,9 +446,34 @@ end
 -- Public helpers (optional)
 ------------------------------------------------
 
--- If you ever want to query from AP-side:
 function M.get_state()
     return challenge_state
+end
+
+-- Flatten all thresholds into a list (useful for AP mapping)
+function M.get_all_thresholds()
+    local out = {}
+    for field_name, def in pairs(CHALLENGES) do
+        if def.targets then
+            for i, target in ipairs(def.targets) do
+                local threshold_id
+                if def.location_ids and def.location_ids[i] then
+                    threshold_id = def.location_ids[i]
+                else
+                    threshold_id = string.format("%s_%d", field_name, target)
+                end
+
+                table.insert(out, {
+                    field_name   = field_name,
+                    label        = def.label or field_name,
+                    index        = i,
+                    target       = target,
+                    threshold_id = threshold_id,
+                })
+            end
+        end
+    end
+    return out
 end
 
 ------------------------------------------------

@@ -216,7 +216,7 @@ _all_items = [DRItemData(row[0], row[1], row[2]) for row in [
     ("Colby's Movie Theater key", 174, DRItemCategory.CONSUMABLE),
     ("Leisure Park key", 175, DRItemCategory.CONSUMABLE),
     ("North Plaza key", 176, DRItemCategory.CONSUMABLE),
-    ("Crisip's Hardware Store key", 177, DRItemCategory.CONSUMABLE),
+    ("Crislip's Hardware Store key", 177, DRItemCategory.CONSUMABLE),
     ("Food Court key", 178, DRItemCategory.CONSUMABLE),
     ("Wonderland Plaza key", 179, DRItemCategory.CONSUMABLE),
     ("Al Fresca Plaza key", 180, DRItemCategory.CONSUMABLE),

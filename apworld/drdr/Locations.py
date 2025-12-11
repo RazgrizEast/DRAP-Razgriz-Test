@@ -56,7 +56,8 @@ class DRLocation(Location):
             "PP Stickers",
             "Main Scoops",
             "Overtime Scoops",
-            "Psycho Scoops"
+            "Psycho Scoops",
+            "Challenges"
         ]
 
         output = {}
@@ -397,6 +398,52 @@ location_tables = {
         DRLocationData("Meet Kent on day 1", "Milk", DRLocationCategory.PSYCHO_SCOOP),
         DRLocationData("Meet Kent on day 2", "Milk", DRLocationCategory.PSYCHO_SCOOP),
         DRLocationData("Kill Kent on day 3", "Milk", DRLocationCategory.PSYCHO_SCOOP),
+    ],
+    
+    "Challenges": [
+        DRLocationData("Reach Level 50", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Kill 500 zombies by hand", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Kill 500 zombies by vehicle", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Walk a marathon", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Change into 5 new outfits", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Change into 50 new outfits", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Encounter 10 survivors", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Encounter 50 survivors", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Get 50 survivors to join", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Kill 1000 zombies", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Kill 10000 zombies", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Zombie Genocide", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Kill 10 Special Forces", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Destroy 30 dishes in the Food Court", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Fire 300 bullets", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Ride zombies for 50 feet", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Spend 12 hours indoors", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Spend 12 hours outdoors", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Kill 1 psychopath", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Kill 8 psychopaths", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Kill 100 cultists", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Hit 10 zombies with a parasol", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Kill 100 zombies with an RPG", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Photograph 10 survivors", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Photograph 30 survivors", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Photograph 4 psychopaths", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Photograph 10 PP Stickers", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Photograph all PP Stickers", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Escort 8 survivors at once", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Frank the pimp", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Build a profile for 87 survivors", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Save 10 survivors", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Save 50 survivors", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Get 10000 PP in one photo", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Get 50 targets in one photo", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Fall from a high height", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Bowl over 10 zombies", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Jump a vehicle 50 feet", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Hit a golf ball 100 feet", "Milk", DRLocationCategory.CHALLENGE),
+
+
+
+        
     ]
 }
 

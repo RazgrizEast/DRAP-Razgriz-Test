@@ -37,7 +37,7 @@ local SCENE_INFO = {
     s503 = { name = "Colby's Movie Theater",   index = 1283 },
     s700 = { name = "Leisure Park",            index = 1792 },
     s400 = { name = "North Plaza",             index = 1024 },
-    s501 = { name = "Crisip's Hardware Store", index = 1281 },
+    s501 = { name = "Crislip's Hardware Store", index = 1281 },
     sa00 = { name = "Food Court",              index = 2560 },
     s300 = { name = "Wonderland Plaza",        index = 768  },
     s900 = { name = "Al Fresca Plaza",         index = 2304 },
@@ -52,8 +52,22 @@ local SCENE_INFO = {
 ------------------------------------------------------------
 
 local LOCKED_SCENES = {
-    -- ["s135"] = true,
-    -- ["s200"] = true,
+    ["s135"] = true,
+    ["s136"] = false,
+    ["s231"] = true,
+    ["s230"] = true,
+    ["s200"] = true,
+    ["s503"] = true,
+    ["s700"] = true,
+    ["s400"] = true,
+    ["s501"] = true,
+    ["sa00"] = true,
+    ["s300"] = true,
+    ["s900"] = true,
+    ["s500"] = true,
+    ["s100"] = false,
+    ["s600"] = true,
+    ["s401"] = true,
 }
 
 local function scene_is_locked(scene_code)
@@ -449,14 +463,9 @@ function M.is_scene_locked(scene_code)
     return scene_is_locked(tostring(scene_code))
 end
 
--- Optional helper if you ever want to bulk-set from AP data
-function M.set_locked_scenes(map)
-    LOCKED_SCENES = map or {}
-    rescan_current_area_doors()
-end
 
 ------------------------------------------------------------
--- Area change detection (central on_frame will call this)
+-- Area change detection
 ------------------------------------------------------------
 
 local last_area_index = nil
