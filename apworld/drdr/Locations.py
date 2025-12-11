@@ -59,6 +59,8 @@ class DRLocation(Location):
             "Food Court",
             "Colby's Movieland",
             "Service Hallway",
+            "Grocery Store",
+            "Crislip's Hardware Store",
             "Level Ups",
             "PP Stickers",
             "Main Scoops",
@@ -157,12 +159,14 @@ location_tables = {
         DRLocationData("Rescue Jonathan Picardson", "Coffee Creamer", DRLocationCategory.SURVIVOR),
         DRLocationData("Rescue Alyssa Laurent", "Well Done Steak", DRLocationCategory.SURVIVOR)
     ],
-
+    "Grocery Store": [
+    ],
     "Food Court": [
         # Survivors rescued from the Food Court
         DRLocationData("Rescue Gil Jiminez", "Milk", DRLocationCategory.SURVIVOR)
     ],
-
+    "Crislip's Hardware Store": [
+    ],
     "Colby's Movieland": [
         # Survivors rescued from Colby's Movieland
         DRLocationData("Rescue Beth Shrake", "Milk", DRLocationCategory.SURVIVOR),
