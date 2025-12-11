@@ -74,19 +74,37 @@ class DRWorld(World):
             "North Plaza",
             "Grocery Store",
             "Crislip's Hardware Store",
-            "Hideout",
             "Level Ups"
         ]})
 
         # Connect Regions
         def create_connection(from_region: str, to_region: str):
-            connection = Entrance(self.player, f"{to_region}", regions[from_region])
+            connection = Entrance(self.player, f"{from_region} -> {to_region}", regions[from_region])
             regions[from_region].exits.append(connection)
             connection.connect(regions[to_region])
             #print(f"Connecting {from_region} to {to_region} Using entrance: " + connection.name)
 
-        create_connection("Menu", "Rooftop")
-        create_connection("Rooftop", "Paradise Plaza")
+        create_connection("Menu", "Helipad")
+        create_connection("Helipad", "Safe Room")
+        create_connection("Safe Room", "Rooftop")
+        create_connection("Rooftop", "Service Hallway")
+        create_connection("Service Hallway", "Paradise Plaza")
+
+        create_connection("Paradise Plaza", "Colby's Movie Theater")
+        create_connection("Paradise Plaza", "Entrance Plaza")
+        create_connection("Paradise Plaza", "Leisure Park")
+
+        create_connection("Entrance Plaza", "Al Fresca Plaza")
+        create_connection("Al Fresca Plaza", "Food Court")
+        create_connection("Food Court", "Wonderland Plaza")
+        create_connection("Wonderland Plaza", "North Plaza") 
+
+        create_connection("Leisure Park", "Food Court")
+        create_connection("Leisure Park", "North Plaza")     
+
+        create_connection("North Plaza", "Grocery Store")   
+        create_connection("North Plaza", "Crislip's Hardware Store")    
+
         create_connection("Menu", "Level Ups")
         
         
@@ -218,6 +236,8 @@ class DRWorld(World):
             previous_level_location = f"Reach Level {level - 1}"
             set_rule(self.multiworld.get_location(current_level_location, self.player), lambda state, prev=previous_level_location: state.can_reach_location(prev, self.player))
         
+        set_rule(self.multiworld.get_entrance("Safe Room -> Rooftop", self.player), lambda state: state.has("Rooftop Key", self.player))   
+
         self.multiworld.completion_condition[self.player] = lambda state: state.can_reach_location("Reach Level 50", self.player)
                 
     def fill_slot_data(self) -> Dict[str, object]:
