@@ -10,6 +10,11 @@ class DRLocationCategory(IntEnum):
     EVENT = 1,
     SURVIVOR = 2,
     LEVEL_UP = 3,
+    PP_STICKER = 4,
+    MAIN_SCOOP = 5,
+    OVERTIME_SCOOP = 6,
+    PSYCHO_SCOOP = 7,
+    CHALLENGE = 8
 
 
 class DRLocationData(NamedTuple):
