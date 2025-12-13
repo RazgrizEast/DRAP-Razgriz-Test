@@ -405,12 +405,12 @@
     "item_number": 94
   },
   {
-    "name": "Potted Plant",
+    "name": "Potted Plant Bamboo",
     "game_id": "ITEM_NO_POTTED_PLANT_0",
     "item_number": 95
   },
   {
-    "name": "Potted Plant",
+    "name": "Potted Plant Tall Bush",
     "game_id": "ITEM_NO_POTTED_PLANT_1",
     "item_number": 96
   },
@@ -420,7 +420,7 @@
     "item_number": 97
   },
   {
-    "name": "Potted Plant",
+    "name": "Potted Plant Small Fern",
     "game_id": "ITEM_NO_POTTED_PLANT_3",
     "item_number": 98
   },
@@ -455,7 +455,7 @@
     "item_number": 106
   },
   {
-    "name": "",
+    "name": "MegaMan Buster Ball",
     "game_id": "ITEM_NO_MEGAMANBUSTER_BALL",
     "item_number": 107
   },
@@ -550,7 +550,7 @@
     "item_number": 135
   },
   {
-    "name": "2\" x 4\"",
+    "name": "2 x 4",
     "game_id": "ITEM_NO_2X4",
     "item_number": 136
   },
@@ -585,7 +585,7 @@
     "item_number": 143
   },
   {
-    "name": "",
+    "name": "Small Chainsaw",
     "game_id": "ITEM_NO_REAL_SMALL_CHAINSAW",
     "item_number": 144
   },
@@ -670,57 +670,57 @@
     "item_number": 169
   },
   {
-    "name": "First Aid Kit",
+    "name": "Book [Toy]",
     "game_id": "ITEM_NO_BOOK_TOY",
     "item_number": 170
   },
   {
-    "name": "First Aid Kit",
+    "name": "Book [Firework]",
     "game_id": "ITEM_NO_BOOK_FIREWORK",
     "item_number": 171
   },
   {
-    "name": "First Aid Kit",
+    "name": "Book [Hypnosis]",
     "game_id": "ITEM_NO_BOOK_HYPNOSIS",
     "item_number": 172
   },
   {
-    "name": "First Aid Kit",
+    "name": "Book [Focus]",
     "game_id": "ITEM_NO_BOOK_FOCUS",
     "item_number": 173
   },
   {
-    "name": "First Aid Kit",
+    "name": "Book [Blender]",
     "game_id": "ITEM_NO_BOOK_BLENDER",
     "item_number": 174
   },
   {
-    "name": "First Aid Kit",
+    "name": "Book [Monster Pitcher]",
     "game_id": "ITEM_NO_BOOK_MONSTER_PITCHER",
     "item_number": 175
   },
   {
-    "name": "First Aid Kit",
+    "name": "Book [Recycle]",
     "game_id": "ITEM_NO_BOOK_RECYCLE",
     "item_number": 176
   },
   {
-    "name": "First Aid Kit",
+    "name": "Book [Martial Arts]",
     "game_id": "ITEM_NO_BOOK_MARTIAL_ART",
     "item_number": 177
   },
   {
-    "name": "First Aid Kit",
+    "name": "Book [Fashion]",
     "game_id": "ITEM_NO_BOOK_FASHION",
     "item_number": 178
   },
   {
-    "name": "First Aid Kit",
+    "name": "Book [Firearms]",
     "game_id": "ITEM_NO_BOOK_FIREARMS",
     "item_number": 179
   },
   {
-    "name": "First Aid Kit",
+    "name": "Book [Infinite Durability]",
     "game_id": "ITEM_NO_BOOK_INFINITE_DURABILITY",
     "item_number": 180
   },
@@ -1200,37 +1200,37 @@
     "item_number": 295
   },
   {
-    "name": "Quickstep Smoothie",
+    "name": "Juice [Quickstep]",
     "game_id": "ITEM_NO_JUICE_QUICK_STEP",
     "item_number": 302
   },
   {
-    "name": "Randomizer Smoothie",
+    "name": "Juice [Randomizer]",
     "game_id": "ITEM_NO_JUICE_RANDOMIZER",
     "item_number": 303
   },
   {
-    "name": "Untouchable Smoothie",
+    "name": "Juice [Untouchable]",
     "game_id": "ITEM_NO_JUICE_UNTOUCHABLE",
     "item_number": 304
   },
   {
-    "name": "Spitfire Smoothie",
+    "name": "Juice [Spitfire]",
     "game_id": "ITEM_NO_JUICE_SPITFIRE",
     "item_number": 305
   },
   {
-    "name": "Nectar Smoothie",
+    "name": "Juice [Nectar]",
     "game_id": "ITEM_NO_JUICE_NECTAR",
     "item_number": 306
   },
   {
-    "name": "Energizer Smoothie",
+    "name": "Juice [Energizer]",
     "game_id": "ITEM_NO_JUICE_ENERGIZER",
     "item_number": 307
   },
   {
-    "name": "Zombait Smoothie",
+    "name": "Juice [Zombait]",
     "game_id": "ITEM_NO_JUICE_ZOMBAIT",
     "item_number": 308
   },
