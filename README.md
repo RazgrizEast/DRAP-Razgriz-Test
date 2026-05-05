@@ -3,8 +3,6 @@ Dead Rising Deluxe Remaster Archipelago Implementation
 
 ## Warning
 
-This is very much an early alpha.  Expect bugs, missing features, and general instability. I plan to make a lot of updates on this, but please be patient.
-
 There aren't a ton of crashes, but you should expect some.  Please report any you find on the issue tracker or in the DRDR AP Discord thread.  Please try to be as detailed as possible.
 
 I have only tested this using the 1.5.7 build of REFramework.  Other versions may or may not work.  More testing will be needed.
