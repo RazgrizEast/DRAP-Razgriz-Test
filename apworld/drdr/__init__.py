@@ -613,7 +613,7 @@ class DRWorld(World):
 
 
     def get_filler_item_name(self) -> str:
-        return "1 PP"
+        return "Rotten Pizza"
 
     def pre_fill(self) -> None:
         """Force early placement of the first gate key + first scoop item.

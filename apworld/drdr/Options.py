@@ -1,6 +1,6 @@
 import typing
 from dataclasses import dataclass
-from Options import Toggle, DefaultOnToggle, Option, Range, Choice, ItemDict, DeathLink, PerGameCommonOptions, \
+from Options import Toggle, DefaultOnToggle, Option, Range, Choice, ItemDict, DeathLink, PerGameCommonOptions, StartInventoryPool, \
     OptionGroup
 
 
@@ -405,6 +405,7 @@ class ExcludeOverpoweredItems(Toggle):
 
 @dataclass
 class DROption(PerGameCommonOptions):
+    start_inventory_from_pool: StartInventoryPool
     goal: Goal
     number_of_survivors: NumberOfSurvivors
     guaranteed_items: GuaranteedItemsOption
