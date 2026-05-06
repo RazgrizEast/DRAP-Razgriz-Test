@@ -33,7 +33,7 @@ MAIN_SCOOP_NAMES = [
     "A Promise to Isabela",
     "Santa Cabeza",
     "The Last Resort",
-    "Carlito's Hideout",
+    "Hideout",
     "Jessie's Discovery",
     "The Butcher",
 ]
@@ -51,7 +51,7 @@ SCOOP_COMPLETION_MAP = {
     "A Promise to Isabela": "Carry Isabela back to the Security Room",
     "Santa Cabeza": "Complete Santa Cabeza",
     "The Last Resort": "Complete Bomb Collector",
-    "Carlito's Hideout": "Escort Isabela to Carlito's Hideout and have a chat",
+    "Hideout": "Escort Isabela to Carlito's Hideout and have a chat",
     "Jessie's Discovery": "Complete Jessie's Discovery",
     "The Butcher": "Complete The Butcher",
 }
@@ -97,7 +97,7 @@ SCOOP_EVENTS = {
     "The Last Resort": [
         "Complete Bomb Collector",
     ],
-    "Carlito's Hideout": [
+    "Hideout": [
         "Escort Isabela to Carlito's Hideout and have a chat",
     ],
     "Jessie's Discovery": [
@@ -118,7 +118,7 @@ SCOOP_REGION_REQUIREMENTS = {
     "Girl Hunting": ["North Plaza"],
     "A Promise to Isabela": ["North Plaza"],
     "The Last Resort": ["Maintenance Tunnel"],
-    "Carlito's Hideout": ["Carlito's Hideout"],
+    "Hideout": ["Carlito's Hideout"],
     "The Butcher": ["Maintenance Tunnel"],
 }
 

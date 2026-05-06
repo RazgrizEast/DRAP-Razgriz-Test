@@ -288,7 +288,7 @@ _all_items = [DRItemData(row[0], row[1], row[2]) for row in [
     ("A Promise to Isabela", 3007, DRItemCategory.SCOOP),
     ("Santa Cabeza", 3008, DRItemCategory.SCOOP),
     ("The Last Resort", 3009, DRItemCategory.SCOOP),
-    ("Carlito's Hideout", 3010, DRItemCategory.SCOOP),
+    ("Hideout", 3010, DRItemCategory.SCOOP),
     ("Jessie's Discovery", 3011, DRItemCategory.SCOOP),
     ("The Butcher", 3012, DRItemCategory.SCOOP),
     # ("The Facts", 3013, DRItemCategory.SCOOP),

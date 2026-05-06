@@ -93,7 +93,7 @@ local SCOOP_DATA = {
         primary_flag = 294, secondary_flags = { 775, 313 }, category = "Main", order = 12,
         completion_event = "Complete Bomb Collector",
     },
-    ["Carlito's Hideout"] = {
+    ["Hideout"] = {
         primary_flag = 776, secondary_flags = { 265 }, disable_flags = { 304 },
         disable_on_unlock = { 355 },
         category = "Main", order = 13,
@@ -378,7 +378,7 @@ local SCOOP_DESCRIPTIONS = {
         trigger = "Walk through the Security Room rear door",
         description = "Collect all bombs in the Maintenance Tunnels and return them.",
     },
-    ["Carlito's Hideout"] = {
+    ["Hideout"] = {
         location = "Security Room",
         trigger = "Walk through the Security Room rear door",
         description = "Escort Isabela from the Security Room to Carlito's Hideout.",
@@ -525,7 +525,7 @@ local COMPLETION_FLAGS = {
     [292] = { event = "Carry Isabela back to the Security Room", scoop = "A Promise to Isabela" },
     [294] = { event = "Complete Santa Cabeza", scoop = "Santa Cabeza" },
     [839] = { event = "Complete Bomb Collector", scoop = "The Last Resort" },
-    [2322] = { event = "Escort Isabela to Carlito's Hideout and have a chat", scoop = "Carlito's Hideout" },
+    [2322] = { event = "Escort Isabela to Carlito's Hideout and have a chat", scoop = "Hideout" },
     [302] = { event = "Complete Jessie's Discovery", scoop = "Jessie's Discovery" },
     [304] = { event = "Complete The Butcher", scoop = "The Butcher" },
 
@@ -597,8 +597,8 @@ local CASCADE_FLAGS = {
     [2194] = "The Last Resort",
     [2439] = "The Last Resort",
 
-    -- Carlito's Hideout
-    [392]  = "Carlito's Hideout",
+    -- Hideout
+    [392]  = "Hideout",
 
     -- The Butcher
     [304]  = "The Butcher",
@@ -641,7 +641,7 @@ local on_time_freeze_callback = nil
 local on_time_unfreeze_callback = nil
 local endgame_reached = false       -- true after Get bit! or Ending A (persisted)
 local professor_276_disabled = false -- tracks one-time disable of flag 276 for Rescue the Professor
-local hideout_key_deferred = false   -- true when Carlito's Hideout scoop deferred (waiting for Carlito's Hideout key)
+local hideout_key_deferred = false   -- true when Hideout scoop deferred (waiting for Carlito's Hideout key)
 local flag_prereq_deferred = {}      -- { [scoop_name] = true } -- scoops blocked by SCOOP_FLAG_PREREQUISITES
 local save_filename = nil
 
@@ -847,6 +847,21 @@ local function ep270_gates_open()
     return false
 end
 
+-- Returns the name of any completed main-category scoop, or nil if none.
+-- Used to gate EP-shutter behavior: Backup for Brad is the first main scoop
+-- in vanilla, so once any *other* main scoop has already completed under
+-- ScoopSanity, the world has progressed past Backup for Brad's natural
+-- gate -- the shutters are already open via that later mission, and the
+-- EP270 cutscene is no longer needed.
+local function find_completed_main_scoop()
+    for name, data in pairs(SCOOP_DATA) do
+        if data.category == "Main" and completed_scoops[name] then
+            return name
+        end
+    end
+    return nil
+end
+
 -- Session-only timestamp of our last flag-270 fire. The cutscene takes a
 -- few seconds to land 765/2280; this grace window prevents a refire while
 -- the cutscene is mid-playback.
@@ -871,6 +886,13 @@ local function try_fire_ep270_in_scoop_sanity()
     if not scoop_sanity_enabled then return end
     if not ap_activated then return end
     if ep270_gates_open() then return end
+
+    -- If any later main scoop has already completed, the shutters are
+    -- already open via that mission -- the EP270 cutscene is redundant
+    -- (and would re-show a closed-shutter cutscene the world has moved
+    -- past). Skip the fire entirely.
+    local later_main = find_completed_main_scoop()
+    if later_main then return end
 
     -- Don't pre-fire if Backup for Brad is the player's active main scoop.
     -- They'll get there on their own; our trigger would only short-circuit
@@ -1070,12 +1092,12 @@ local function enforce_flags()
     -- has been moved to on_frame() so it runs regardless of scoop_sanity_enabled.
 
     -- Toggle flag 355 based on area: ON in North Plaza, OFF in Carlito's Hideout.
-    -- While Carlito's Hideout is active (received + not completed), skip area toggling
+    -- While Hideout is active (received + not completed), skip area toggling
     -- so the game can manage 355 on its own (it enables 355 for a cutscene).
     -- The one-time disable at unlock (disable_on_unlock) ensures 355 starts OFF.
     if ap_activated then
-        local hideout_active = received_scoops["Carlito's Hideout"]
-                           and not completed_scoops["Carlito's Hideout"]
+        local hideout_active = received_scoops["Hideout"]
+                           and not completed_scoops["Hideout"]
         if not hideout_active then
             local area = get_current_area_index()
             if area == NORTH_PLAZA_AREA_INDEX then
@@ -1624,10 +1646,10 @@ function M.unlock_scoop(scoop_name)
     flag_prereq_deferred[scoop_name] = nil
 
     -- Carlito's Hideout requires Carlito's Hideout key -- defer until player has it
-    if scoop_name == "Carlito's Hideout" then
+    if scoop_name == "Hideout" then
         if not has_hideout_key() then
             hideout_key_deferred = true
-            M.log("Carlito's Hideout deferred: waiting for Carlito's Hideout key")
+            M.log("Hideout deferred: waiting for Carlito's Hideout key")
             return false, 0
         end
         hideout_key_deferred = false
@@ -1639,13 +1661,42 @@ function M.unlock_scoop(scoop_name)
     -- disable_flags BEFORE enabling mission flags -- prevents stale flags from
     -- triggering immediate completion (e.g. 292 left over from Santa Cabeza).
     -- disable_on_unlock is the same but only fires here (not in the enforcement
-    -- loop), so the game can re-enable the flag later (e.g. 355 for Carlito's Hideout cutscene).
+    -- loop), so the game can re-enable the flag later (e.g. 355 for Hideout cutscene).
     for _, list in ipairs({ scoop.disable_flags, scoop.disable_on_unlock }) do
         if list then
             for _, flag_id in ipairs(list) do
                 if raw_check_flag(flag_id) then
                     raw_set_flag_off(flag_id)
                     M.log(string.format("Disabled conflicting flag %d for '%s'", flag_id, scoop_name))
+                end
+            end
+        end
+    end
+
+    -- Backup for Brad: conditional EP-shutter reset. Under ScoopSanity the
+    -- player may have pre-fired 270 (and the cutscene tail set 765/2280)
+    -- to open the shutters in EP. With those flags still on, the natural
+    -- Backup-for-Brad flow can't replay the cutscene to spawn Brad and
+    -- the off->on transition that drives COMPLETION_FLAGS[270] never
+    -- fires, so "Complete Backup for Brad" never sends. We clear all
+    -- three at unlock so the mission can run vanilla-style.
+    --
+    -- BUT if any *later* main scoop has already completed, the player has
+    -- progressed past the point where Backup for Brad needs the shutters
+    -- closed -- the open shutters are now part of post-progression state.
+    -- Re-closing them would break late-game traversal, so we skip the
+    -- reset. Backup for Brad is the first main scoop in vanilla, so any
+    -- other completed main scoop counts as "later".
+    if scoop_name == "Backup for Brad" then
+        local blocker = find_completed_main_scoop()
+        if blocker then
+            M.log(string.format("Backup for Brad: skipping EP-shutter reset (later main scoop '%s' already completed)",
+                blocker))
+        else
+            for _, fid in ipairs({ 270, 765, 2280 }) do
+                if raw_check_flag(fid) then
+                    raw_set_flag_off(fid)
+                    M.log(string.format("Cleared EP-shutter flag %d for Backup for Brad unlock", fid))
                 end
             end
         end
@@ -2378,7 +2429,7 @@ function M.draw_tab_content(debug)
     end
 
     if hideout_key_deferred then
-        imgui.text_colored("Carlito's Hideout deferred: waiting for Carlito's Hideout key", 0xFF00AAFF)
+        imgui.text_colored("Hideout deferred: waiting for Carlito's Hideout key", 0xFF00AAFF)
     end
 
     for _, s in ipairs(status_list) do
@@ -2595,12 +2646,12 @@ function M.on_frame()
         end
     end
 
-    -- Suppress door randomization while Carlito's Hideout is active so Isabela follows
+    -- Suppress door randomization while Hideout is active so Isabela follows
     -- through doors correctly. Uses flag checks so it works with or without ScoopSanity.
-    -- Flag 776 = Carlito's Hideout primary, flag 2322 = Carlito's Hideout completion.
+    -- Flag 776 = Hideout primary, flag 2322 = Hideout completion.
     if door_randomizer_enabled and efm_mgr:get() then
         local hideout_flag_on = raw_check_flag(776)
-        local hideout_done    = raw_check_flag(2322) or completed_scoops["Carlito's Hideout"]
+        local hideout_done    = raw_check_flag(2322) or completed_scoops["Hideout"]
         local should_suppress = hideout_flag_on and not hideout_done
         local dr = AP and AP.DoorRandomizer
         if dr and dr.set_suppressed then
@@ -2651,10 +2702,10 @@ function M.on_frame()
         end
     end
 
-    -- Carlito's Hideout key deferral: retry activating Carlito's Hideout once the player has the key
+    -- Carlito's Hideout key deferral: retry activating Hideout once the player has the key
     if hideout_key_deferred and has_hideout_key() then
         hideout_key_deferred = false
-        M.log("Carlito's Hideout key received -- retrying Carlito's Hideout activation")
+        M.log("Carlito's Hideout key received -- retrying Hideout activation")
         try_advance_chain()
     end
 
