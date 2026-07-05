@@ -400,24 +400,24 @@ class DRWorld(World):
         #     Entrance Plaza key (the door itself).
         if self.options.scoop_sanity:
             create_connection("Security Room", "Entrance Plaza")
+            create_connection("Paradise Plaza", "Entrance Plaza")
             create_connection("Entrance Plaza", "Al Fresca Plaza")
             create_connection("Al Fresca Plaza", "Food Court")
             create_connection("Seon's Food and Stuff", "North Plaza")
 
-        # Maintenance Tunnel doors work in every mode and both directions.
+        # Maintenance Tunnel doors work in every mode and both directions,
+        # with one exception: vanilla Entrance Plaza access always comes
+        # through Al Fresca Plaza, so the tunnel-to-EP door (and the
+        # Paradise -> EP shutter above) are only modeled in ScoopSanity.
         # The keyless Leisure Park ramp is created with the other Leisure
         # Park connections below.
         for _zone in MAINTENANCE_TUNNEL_ZONES:
             create_connection(_zone, "Maintenance Tunnel")
-            create_connection("Maintenance Tunnel", _zone)
+            if _zone != "Entrance Plaza" or self.options.scoop_sanity:
+                create_connection("Maintenance Tunnel", _zone)
         create_connection("Maintenance Tunnel", "Leisure Park")
 
         create_connection("Al Fresca Plaza", "Entrance Plaza")
-
-        # Paradise Plaza <-> Entrance Plaza are connected in-game. Open from
-        # the start in ScoopSanity (key-gated); in vanilla the shutter opens
-        # once the player can reach "Complete Rescue the Professor".
-        create_connection("Paradise Plaza", "Entrance Plaza")
 
         create_connection("Food Court", "Al Fresca Plaza")
         create_connection("Food Court", "Wonderland Plaza")
@@ -875,22 +875,12 @@ class DRWorld(World):
             set_rule(self.multiworld.get_entrance("North Plaza -> Carlito's Hideout", self.player), lambda state: state.has("Carlito's Hideout key", self.player))
             set_rule(self.multiworld.get_entrance("North Plaza -> Crislip's Home Saloon", self.player), lambda state: state.has("Crislip's Home Saloon key", self.player))
 
-            # Paradise Plaza <-> Entrance Plaza: open from the start in
-            # ScoopSanity (door key only); in vanilla the shutter opens once
-            # the player can complete Rescue the Professor.
-            _pp_ep = self.multiworld.get_entrance("Paradise Plaza -> Entrance Plaza", self.player)
-            if self.options.scoop_sanity:
-                set_rule(_pp_ep, lambda state: state.has("Entrance Plaza key", self.player))
-            else:
-                set_rule(_pp_ep, lambda state: state.can_reach_location("Complete Rescue the Professor", self.player))
-                self.multiworld.register_indirect_condition(
-                    self.multiworld.get_region("Entrance Plaza", self.player), _pp_ep)
-
             # Maintenance Tunnel doors: every mall<->tunnel door needs the
             # Maintenance Tunnel key plus the Access Key -- either the AP
             # item or the physical copy inside the tunnels, which is
             # reachable through the keyless Leisure Park ramp. Mall-side
-            # exits also need the destination zone's key.
+            # exits also need the destination zone's key. The tunnel-to-EP
+            # exit only exists in ScoopSanity (see create_connection).
             _mt_region = self.multiworld.get_region("Maintenance Tunnel", self.player)
             _tunnel_door = lambda state: (state.has("Maintenance Tunnel key", self.player)
                                           and (state.has("Maintenance Tunnel Access Key", self.player)
@@ -899,9 +889,10 @@ class DRWorld(World):
                 _into = self.multiworld.get_entrance(f"{_zone} -> Maintenance Tunnel", self.player)
                 set_rule(_into, _tunnel_door)
                 self.multiworld.register_indirect_condition(_mt_region, _into)
-                set_rule(self.multiworld.get_entrance(f"Maintenance Tunnel -> {_zone}", self.player),
-                         lambda state, k=f"{_zone} key": state.has("Maintenance Tunnel key", self.player)
-                                       and state.has(k, self.player))
+                if _zone != "Entrance Plaza" or self.options.scoop_sanity:
+                    set_rule(self.multiworld.get_entrance(f"Maintenance Tunnel -> {_zone}", self.player),
+                             lambda state, k=f"{_zone} key": state.has("Maintenance Tunnel key", self.player)
+                                           and state.has(k, self.player))
             set_rule(self.multiworld.get_entrance("Maintenance Tunnel -> Leisure Park", self.player),
                      lambda state: state.has("Maintenance Tunnel key", self.player)
                                    and state.has("Leisure Park key", self.player))
@@ -911,11 +902,17 @@ class DRWorld(World):
             #     Warehouse key (the player must have been able to reach
             #     Jessie in the Warehouse for the cutscene to fire) plus
             #     Entrance Plaza key (the door itself).
+            #   * Paradise Plaza -> Entrance Plaza is open from the start
+            #     (key only). Not modeled in vanilla: EP access always goes
+            #     through Al Fresca first, and the shutter opens during the
+            #     Rescue the Professor escort, which chains behind EP reach.
             if self.options.scoop_sanity:
                 set_rule(self.multiworld.get_entrance("Security Room -> Entrance Plaza", self.player),
                          lambda state: state.has("Rooftop key", self.player)
                                        and state.has("Warehouse key", self.player)
                                        and state.has("Entrance Plaza key", self.player))
+                set_rule(self.multiworld.get_entrance("Paradise Plaza -> Entrance Plaza", self.player),
+                         lambda state: state.has("Entrance Plaza key", self.player))
                 set_rule(self.multiworld.get_entrance("Entrance Plaza -> Al Fresca Plaza", self.player),
                          lambda state: state.has("Al Fresca Plaza key", self.player))
                 set_rule(self.multiworld.get_entrance("Al Fresca Plaza -> Food Court", self.player),
