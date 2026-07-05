@@ -2607,9 +2607,9 @@
       "location_template_plural": "Heat a pan on {n} stoves",
       "all_location_name": "Heat a pan on all stoves",
       "count_tiers": [
-        {"max_count": 2, "regions": ["Paradise Plaza"]},
-        {"max_count": 4, "regions": ["Paradise Plaza", "Food Court"]},
-        {"max_count": 5, "regions": ["Paradise Plaza", "Food Court", "Al Fresca Plaza"]}
+        {"max_count": 1, "regions": ["Al Fresca Plaza"]},
+        {"max_count": 3, "regions": ["Al Fresca Plaza", "Paradise Plaza"]},
+        {"max_count": 5, "regions": ["Al Fresca Plaza", "Paradise Plaza", "Food Court"]}
       ],
       "restricted_mode_items_any": ["Frying Pan"]
     }

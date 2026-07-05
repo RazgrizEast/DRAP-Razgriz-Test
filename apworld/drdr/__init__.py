@@ -211,6 +211,14 @@ PP_STICKER_GROUPS = [
     (2, ["Paradise Plaza", "Leisure Park"], ["Get grabbed by the raincoats"]),    # Stickers 98-99
 ]
 
+# Zones with a direct door into the Maintenance Tunnel. The Leisure Park
+# ramp is separate -- it is the only tunnel entrance that never needs the
+# Access Key (the physical copy is picked up inside the tunnels).
+MAINTENANCE_TUNNEL_ZONES = [
+    "Paradise Plaza", "Entrance Plaza", "Al Fresca Plaza",
+    "Food Court", "Wonderland Plaza", "Seon's Food and Stuff",
+]
+
 # AREA_KEY_NAMES and TIME_KEY_NAMES are imported from .shared_data above.
 # The underlying data lives in drdr_shared.json (shared with the Lua mod).
 
@@ -390,20 +398,19 @@ class DRWorld(World):
         #     pathway instead of being one-shot). Access requires Rooftop
         #     key + Warehouse key (proxy for "got to Jessie") plus the
         #     Entrance Plaza key (the door itself).
-        #   * Players can also enter Maintenance Tunnels directly with the
-        #     Maintenance Tunnel Key and Maintenance Tunnel Access Key.
         if self.options.scoop_sanity:
             create_connection("Security Room", "Entrance Plaza")
             create_connection("Entrance Plaza", "Al Fresca Plaza")
             create_connection("Al Fresca Plaza", "Food Court")
-            create_connection("Paradise Plaza", "Maintenance Tunnel")
-            create_connection("Entrance Plaza", "Maintenance Tunnel")
-            create_connection("Maintenance Tunnel", "Al Fresca Plaza")
-            create_connection("Maintenance Tunnel", "Wonderland Plaza")
-            create_connection("Maintenance Tunnel", "Food Court")
-            create_connection("Maintenance Tunnel", "Seon's Food and Stuff")
-            create_connection("Maintenance Tunnel", "Leisure Park")
             create_connection("Seon's Food and Stuff", "North Plaza")
+
+        # Maintenance Tunnel doors work in every mode and both directions.
+        # The keyless Leisure Park ramp is created with the other Leisure
+        # Park connections below.
+        for _zone in MAINTENANCE_TUNNEL_ZONES:
+            create_connection(_zone, "Maintenance Tunnel")
+            create_connection("Maintenance Tunnel", _zone)
+        create_connection("Maintenance Tunnel", "Leisure Park")
 
         create_connection("Al Fresca Plaza", "Entrance Plaza")
 
@@ -871,22 +878,39 @@ class DRWorld(World):
             # Paradise Plaza <-> Entrance Plaza: open from the start in
             # ScoopSanity (door key only); in vanilla the shutter opens once
             # the player can complete Rescue the Professor.
+            _pp_ep = self.multiworld.get_entrance("Paradise Plaza -> Entrance Plaza", self.player)
             if self.options.scoop_sanity:
-                set_rule(self.multiworld.get_entrance("Paradise Plaza -> Entrance Plaza", self.player),
-                         lambda state: state.has("Entrance Plaza key", self.player))
+                set_rule(_pp_ep, lambda state: state.has("Entrance Plaza key", self.player))
             else:
-                set_rule(self.multiworld.get_entrance("Paradise Plaza -> Entrance Plaza", self.player),
-                         lambda state: state.can_reach_location("Complete Rescue the Professor", self.player))
+                set_rule(_pp_ep, lambda state: state.can_reach_location("Complete Rescue the Professor", self.player))
+                self.multiworld.register_indirect_condition(
+                    self.multiworld.get_region("Entrance Plaza", self.player), _pp_ep)
+
+            # Maintenance Tunnel doors: every mall<->tunnel door needs the
+            # Maintenance Tunnel key plus the Access Key -- either the AP
+            # item or the physical copy inside the tunnels, which is
+            # reachable through the keyless Leisure Park ramp. Mall-side
+            # exits also need the destination zone's key.
+            _mt_region = self.multiworld.get_region("Maintenance Tunnel", self.player)
+            _tunnel_door = lambda state: (state.has("Maintenance Tunnel key", self.player)
+                                          and (state.has("Maintenance Tunnel Access Key", self.player)
+                                               or state.can_reach_region("Maintenance Tunnel", self.player)))
+            for _zone in MAINTENANCE_TUNNEL_ZONES:
+                _into = self.multiworld.get_entrance(f"{_zone} -> Maintenance Tunnel", self.player)
+                set_rule(_into, _tunnel_door)
+                self.multiworld.register_indirect_condition(_mt_region, _into)
+                set_rule(self.multiworld.get_entrance(f"Maintenance Tunnel -> {_zone}", self.player),
+                         lambda state, k=f"{_zone} key": state.has("Maintenance Tunnel key", self.player)
+                                       and state.has(k, self.player))
+            set_rule(self.multiworld.get_entrance("Maintenance Tunnel -> Leisure Park", self.player),
+                     lambda state: state.has("Maintenance Tunnel key", self.player)
+                                   and state.has("Leisure Park key", self.player))
 
             # ScoopSanity-only entrance rules:
             #   * Security Room -> Entrance Plaza requires Rooftop key +
             #     Warehouse key (the player must have been able to reach
             #     Jessie in the Warehouse for the cutscene to fire) plus
             #     Entrance Plaza key (the door itself).
-            #   * Maintenance Tunnel doors all take the Maintenance Tunnel
-            #     key + Access Key, plus the destination zone key on the way
-            #     out. Reaching the source zone already proves the path
-            #     there, so no extra keys are stacked on.
             if self.options.scoop_sanity:
                 set_rule(self.multiworld.get_entrance("Security Room -> Entrance Plaza", self.player),
                          lambda state: state.has("Rooftop key", self.player)
@@ -898,19 +922,6 @@ class DRWorld(World):
                          lambda state: state.has("Food Court key", self.player))
                 set_rule(self.multiworld.get_entrance("Seon's Food and Stuff -> North Plaza", self.player),
                          lambda state: state.has("North Plaza key", self.player))
-                for _mt_entrance, _dest_key in [
-                    ("Paradise Plaza -> Maintenance Tunnel", None),
-                    ("Entrance Plaza -> Maintenance Tunnel", None),
-                    ("Maintenance Tunnel -> Al Fresca Plaza", "Al Fresca Plaza key"),
-                    ("Maintenance Tunnel -> Food Court", "Food Court key"),
-                    ("Maintenance Tunnel -> Wonderland Plaza", "Wonderland Plaza key"),
-                    ("Maintenance Tunnel -> Seon's Food and Stuff", "Seon's Food and Stuff key"),
-                    ("Maintenance Tunnel -> Leisure Park", "Leisure Park key"),
-                ]:
-                    set_rule(self.multiworld.get_entrance(_mt_entrance, self.player),
-                             lambda state, k=_dest_key: state.has("Maintenance Tunnel key", self.player)
-                                           and state.has("Maintenance Tunnel Access Key", self.player)
-                                           and (k is None or state.has(k, self.player)))
 
         # "Meet Jessie in the Warehouse" is a prologue main scoop that
         # always exists (see PROLOGUE_MAIN_SCOOPS). Its rule is set outside
