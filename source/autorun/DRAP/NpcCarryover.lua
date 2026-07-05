@@ -22,7 +22,6 @@ local npc_mgr = M:add_singleton("npc", NPC_MANAGER_TYPE)
 local hooks_installed = false
 local hook_install_attempted = false
 
-local npc_replace_list_field = nil
 local check_carry_over_method = nil
 local npc_manager_td = nil
 
@@ -60,53 +59,6 @@ local function is_npc_near_player(npc_pos, player_pos)
     local dy = math.abs((npc_pos.y or 0) - (player_pos.y or 0))
     local dz = math.abs((npc_pos.z or 0) - (player_pos.z or 0))
     return dx <= NPC_PROXIMITY_THRESHOLD and dy <= NPC_PROXIMITY_THRESHOLD and dz <= NPC_PROXIMITY_THRESHOLD
-end
-
-------------------------------------------------------------
--- NPC List Field Discovery
-------------------------------------------------------------
-
-local function discover_npc_replace_list_field()
-    if npc_replace_list_field then return true end
-
-    local mgr = npc_mgr:get()
-    if not mgr then return false end
-
-    local td = npc_mgr:get_type_def()
-    if not td then return false end
-
-    local candidates = { "mpReplaceList", "mReplaceList", "replaceList", "mpNpcReplaceList" }
-    for _, name in ipairs(candidates) do
-        local f = td:get_field(name)
-        if f then
-            local ok, val = pcall(f.get_data, f, mgr)
-            if ok and val then
-                local count = Shared.get_collection_count(val)
-                if count >= 0 then
-                    npc_replace_list_field = f
-                    return true
-                end
-            end
-        end
-    end
-
-    -- Fallback: search all fields for a List containing NpcBaseInfo
-    local fields = Shared.get_fields_array(td)
-    for _, field in ipairs(fields) do
-        if field then
-            local ok_name, fname = pcall(field.get_name, field)
-            if ok_name and fname then
-                local ftype = field:get_type()
-                local tname = ftype and ftype:get_full_name() or ""
-                if tname:find("List") and tname:find("NpcBaseInfo") then
-                    npc_replace_list_field = field
-                    return true
-                end
-            end
-        end
-    end
-
-    return false
 end
 
 ------------------------------------------------------------
@@ -205,10 +157,6 @@ local function install_hooks()
         return
     end
 
-    if not discover_npc_replace_list_field() then
-        M.log("WARNING: Could not find NPC replace list field")
-    end
-
     -- Hook checkCarryOverNpc - this is where we rewrite NPC destinations
     local hook1_ok = pcall(function()
         sdk.hook(
@@ -236,10 +184,17 @@ local function install_hooks()
                 end
 
                 if tr and tr.randomized and tr.randomized.was_redirected then
+                    -- checkCarryOverNpc returns System.Void, so retval holds
+                    -- leftover register garbage -- never a usable list. Read
+                    -- the manager's NpcInfoList directly; the JOIN+area+
+                    -- proximity filter in rewrite_npc_list picks out the
+                    -- party members this hook is meant to redirect.
                     local npc_list = nil
-                    local ok_mo, retval_mo = pcall(sdk.to_managed_object, retval)
-                    if ok_mo and retval_mo then
-                        npc_list = retval_mo
+                    local mgr = npc_mgr:get()
+                    if mgr then
+                        pcall(function()
+                            npc_list = mgr:get_field("NpcInfoList")
+                        end)
                     end
 
                     if npc_list and Shared.get_collection_count(npc_list) > 0 then
@@ -269,6 +224,191 @@ local function install_hooks()
     hooks_installed = true
     M.log("Hooks installed successfully")
 end
+
+------------------------------------------------------------
+-- Party parking: moves the farthest party members' records into another
+-- area so post-transition spawn waves stay small. Parked members remain
+-- in the party (JOIN) and spawn normally when the player visits the park
+-- area to collect them.
+------------------------------------------------------------
+
+--- Parks all but the nearest keep_n party members into park_area.
+--- @param keep_n number|nil How many to keep with the player (default 8)
+--- @param park_area number|nil Explicit mAreaNo to park into; when omitted,
+---        uses the most common area found on non-party NPC records.
+function M.park_party(keep_n, park_area)
+    keep_n = tonumber(keep_n) or 8
+    local mgr = npc_mgr:get()
+    if not mgr then M.log("park: NpcManager unavailable") return 0 end
+    local list = nil
+    pcall(function() list = mgr:get_field("NpcInfoList") end)
+    if not list then M.log("park: NpcInfoList unavailable") return 0 end
+
+    local player_pos = get_player_position()
+    local join, other_areas = {}, {}
+    local count = Shared.get_collection_count(list)
+    for i = 0, count - 1 do
+        local info = Shared.get_collection_item(list, i)
+        if info then
+            local state, area, pos = nil, nil, nil
+            pcall(function() state = Shared.to_int(info:get_field("mLiveState")) end)
+            pcall(function() area = Shared.to_int(info:get_field("mAreaNo")) end)
+            pcall(function() pos = extract_vec3(info:get_field("mPos")) end)
+            if state == 2 then  -- JOIN: party member
+                local d = math.huge
+                if pos and player_pos then
+                    local dx = (pos.x or 0) - (player_pos.x or 0)
+                    local dy = (pos.y or 0) - (player_pos.y or 0)
+                    local dz = (pos.z or 0) - (player_pos.z or 0)
+                    d = dx * dx + dy * dy + dz * dz
+                end
+                table.insert(join, { info = info, dist = d, area = area })
+            elseif area and area >= 0 then
+                other_areas[area] = (other_areas[area] or 0) + 1
+            end
+        end
+    end
+
+    if #join <= keep_n then
+        M.log(string.format("park: party=%d <= keep=%d; nothing to do", #join, keep_n))
+        return 0
+    end
+
+    -- The party's own area = modal mAreaNo among JOIN records.
+    local join_area_counts = {}
+    for _, j in ipairs(join) do
+        if j.area then
+            join_area_counts[j.area] = (join_area_counts[j.area] or 0) + 1
+        end
+    end
+    local current_area, cur_n = nil, -1
+    for a, n in pairs(join_area_counts) do
+        if n > cur_n then current_area, cur_n = a, n end
+    end
+
+    park_area = tonumber(park_area)
+    if not park_area then
+        local best_n = -1
+        for a, n in pairs(other_areas) do
+            if a ~= current_area and n > best_n then park_area, best_n = a, n end
+        end
+    end
+    if not park_area then
+        M.log("park: no park area could be derived -- call drap_party_park(keep_n, area_no)")
+        return 0
+    end
+    if park_area == current_area then
+        M.log(string.format("park: derived area %d equals the party's area -- pass an explicit area_no", park_area))
+        return 0
+    end
+
+    -- Keep the nearest keep_n; park the rest. mCarryOverFlag routes their
+    -- eventual spawn through the carry-over appear points instead of their
+    -- stale coordinates.
+    table.sort(join, function(a, b) return a.dist < b.dist end)
+    local parked = 0
+    for i = keep_n + 1, #join do
+        local ok = pcall(function()
+            join[i].info:set_field("mAreaNo", park_area)
+            join[i].info:set_field("mCarryOverFlag", true)
+        end)
+        if ok then parked = parked + 1 end
+    end
+
+    M.log(string.format(
+        "park: parked %d of %d party members to area %d (kept nearest %d). "
+        .. "Visit that area to collect them.", parked, #join, park_area, keep_n))
+    return parked
+end
+
+_G.drap_party_park = function(keep_n, park_area)
+    local n = M.park_party(keep_n, park_area)
+    print(string.format("[DRAP] parked %d party member(s) -- see NpcCarryOver log for details", n))
+end
+
+--- Clears mCarryOverFlag on every JOIN record (optionally only in one
+--- area). Parked members keep their park area but spawn via their stored
+--- position instead of the carry-over path.
+function M.unpark_party(area_filter)
+    area_filter = tonumber(area_filter)
+    local mgr = npc_mgr:get()
+    if not mgr then M.log("unpark: NpcManager unavailable") return 0 end
+    local list = nil
+    pcall(function() list = mgr:get_field("NpcInfoList") end)
+    if not list then M.log("unpark: NpcInfoList unavailable") return 0 end
+
+    local cleared = 0
+    local count = Shared.get_collection_count(list)
+    for i = 0, count - 1 do
+        local info = Shared.get_collection_item(list, i)
+        if info then
+            local state, area, carry = nil, nil, nil
+            pcall(function() state = Shared.to_int(info:get_field("mLiveState")) end)
+            pcall(function() area = Shared.to_int(info:get_field("mAreaNo")) end)
+            pcall(function() carry = info:get_field("mCarryOverFlag") end)
+            if state == 2 and carry == true
+                and (not area_filter or area == area_filter) then
+                local ok = pcall(function()
+                    info:set_field("mCarryOverFlag", false)
+                end)
+                if ok then cleared = cleared + 1 end
+            end
+        end
+    end
+    M.log(string.format("unpark: cleared carry-over flag on %d record(s)%s",
+        cleared, area_filter and (" in area " .. area_filter) or ""))
+    return cleared
+end
+
+_G.drap_party_unpark = function(area_filter)
+    local n = M.unpark_party(area_filter)
+    print(string.format("[DRAP] cleared carry-over flag on %d record(s)", n))
+end
+
+------------------------------------------------------------
+-- Armed auto-park: run park_party automatically on the next entry into
+-- gameplay. For saves where a crashing cutscene triggers within seconds of
+-- loading, there is no time to type the park command manually -- arm this
+-- at the TITLE SCREEN, then load the save.
+------------------------------------------------------------
+
+local autopark_pending = nil   -- { keep_n, park_area } or nil
+local autopark_was_in_game = false
+
+_G.drap_party_autopark = function(keep_n, park_area)
+    autopark_pending = { keep_n = tonumber(keep_n) or 8,
+                         park_area = tonumber(park_area) }
+    print(string.format("[DRAP] auto-park ARMED: keep %d on next game entry"
+        .. " -- load your save now", autopark_pending.keep_n))
+end
+
+_G.drap_party_autopark_cancel = function()
+    autopark_pending = nil
+    print("[DRAP] auto-park disarmed")
+end
+
+local function autopark_tick()
+    local in_game = Shared.is_in_game()
+    if not in_game then
+        autopark_was_in_game = false
+        return
+    end
+    if autopark_was_in_game then return end
+    autopark_was_in_game = true
+    if not autopark_pending then return end
+
+    local p = autopark_pending
+    autopark_pending = nil
+    local n = M.park_party(p.keep_n, p.park_area)
+    M.log(string.format("auto-park fired on game entry: parked %d", n))
+    print(string.format("[DRAP] auto-park fired: parked %d party member(s)", n))
+end
+
+-- Own frame hook: the main loop only calls M.on_frame while in-game, which
+-- would blind the menu->game edge detection above.
+re.on_frame(function()
+    pcall(autopark_tick)
+end)
 
 ------------------------------------------------------------
 -- Public API
