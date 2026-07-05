@@ -112,7 +112,7 @@ SCOOP_EVENTS = {
 # Region(s) the player must physically reach to complete each scoop.
 # Scoops in the Security Room (always reachable) are omitted.
 SCOOP_REGION_REQUIREMENTS = {
-    "Backup for Brad": ["Food Court", "Entrance Plaza"],
+    "Backup for Brad": ["Food Court", "Al Fresca Plaza", "Entrance Plaza"],
     "Rescue the Professor": ["Entrance Plaza", "Paradise Plaza"],
     "Medicine Run": ["Seon's Food and Stuff"],
     "Girl Hunting": ["North Plaza"],
@@ -1081,24 +1081,35 @@ class DRWorld(World):
         set_rule(self.multiworld.get_location("Photograph PP Sticker 24", self.player), lambda state: state.can_reach_region("Colby's Movieland", self.player))
 
         # PP Stickers in Entrance Plaza
-        # EP shutter gate (used by EP stickers, EP survivors, Hall Family).
-        # Vanilla: gated on Brad escort. ScoopSanity: the shutters open once
-        # the player has met Jessie (Warehouse reach) and can get to
-        # Entrance Plaza — every use site already checks EP reachability.
-        if self.options.scoop_sanity:
-            ep_shutter = lambda state: state.can_reach_region("Warehouse", self.player)
+        # EP shutter gate (EP stickers 25-34, EP survivors, Wayne's check).
+        # Vanilla: the shutters open during the Brad escort.
+        # ScoopSanity: the EP trigger spot opens them after meeting Jessie,
+        # but the trigger is suppressed while Backup for Brad is received
+        # and incomplete, and activating a first-in-chain Backup re-closes
+        # them. Completing any main scoop leaves them open, so the
+        # guaranteed-open state is "first chain scoop completable" -- which
+        # for a Backup-first chain is the Brad escort itself.
+        # Savior+SS: no main scoops exist to suppress the trigger, so
+        # meeting Jessie (Warehouse reach) is enough.
+        if self.options.scoop_sanity and self.scoop_order:
+            _shutter_anchor = SCOOP_COMPLETION_MAP[self.scoop_order[0]]
+            _shutter = lambda state: state.can_reach_location(_shutter_anchor, self.player)
+        elif self.options.scoop_sanity:
+            _shutter = lambda state: state.can_reach_region("Warehouse", self.player)
         else:
-            ep_shutter = None
-        set_rule(self.multiworld.get_location("Photograph PP Sticker 25", self.player), lambda state: state.can_reach_region("Entrance Plaza", self.player) and ((not self.options.scoop_sanity and state.can_reach_location("Escort Brad to see Dr Barnaby", self.player)) or (self.options.scoop_sanity and ep_shutter(state))))
-        set_rule(self.multiworld.get_location("Photograph PP Sticker 26", self.player), lambda state: state.can_reach_region("Entrance Plaza", self.player) and ((not self.options.scoop_sanity and state.can_reach_location("Escort Brad to see Dr Barnaby", self.player)) or (self.options.scoop_sanity and ep_shutter(state))))
-        set_rule(self.multiworld.get_location("Photograph PP Sticker 27", self.player), lambda state: state.can_reach_region("Entrance Plaza", self.player) and ((not self.options.scoop_sanity and state.can_reach_location("Escort Brad to see Dr Barnaby", self.player)) or (self.options.scoop_sanity and ep_shutter(state))))
-        set_rule(self.multiworld.get_location("Photograph PP Sticker 28", self.player), lambda state: state.can_reach_region("Entrance Plaza", self.player) and ((not self.options.scoop_sanity and state.can_reach_location("Escort Brad to see Dr Barnaby", self.player)) or (self.options.scoop_sanity and ep_shutter(state))))
-        set_rule(self.multiworld.get_location("Photograph PP Sticker 29", self.player), lambda state: state.can_reach_region("Entrance Plaza", self.player) and ((not self.options.scoop_sanity and state.can_reach_location("Escort Brad to see Dr Barnaby", self.player)) or (self.options.scoop_sanity and ep_shutter(state))))
-        set_rule(self.multiworld.get_location("Photograph PP Sticker 30", self.player), lambda state: state.can_reach_region("Entrance Plaza", self.player) and ((not self.options.scoop_sanity and state.can_reach_location("Escort Brad to see Dr Barnaby", self.player)) or (self.options.scoop_sanity and ep_shutter(state))))
-        set_rule(self.multiworld.get_location("Photograph PP Sticker 31", self.player), lambda state: state.can_reach_region("Entrance Plaza", self.player) and ((not self.options.scoop_sanity and state.can_reach_location("Escort Brad to see Dr Barnaby", self.player)) or (self.options.scoop_sanity and ep_shutter(state))))
-        set_rule(self.multiworld.get_location("Photograph PP Sticker 32", self.player), lambda state: state.can_reach_region("Entrance Plaza", self.player) and ((not self.options.scoop_sanity and state.can_reach_location("Escort Brad to see Dr Barnaby", self.player)) or (self.options.scoop_sanity and ep_shutter(state))))
-        set_rule(self.multiworld.get_location("Photograph PP Sticker 33", self.player), lambda state: state.can_reach_region("Entrance Plaza", self.player) and ((not self.options.scoop_sanity and state.can_reach_location("Escort Brad to see Dr Barnaby", self.player)) or (self.options.scoop_sanity and ep_shutter(state))))
-        set_rule(self.multiworld.get_location("Photograph PP Sticker 34", self.player), lambda state: state.can_reach_region("Entrance Plaza", self.player) and ((not self.options.scoop_sanity and state.can_reach_location("Escort Brad to see Dr Barnaby", self.player)) or (self.options.scoop_sanity and ep_shutter(state))))
+            _shutter = lambda state: state.can_reach_location("Escort Brad to see Dr Barnaby", self.player)
+        ep_shutter = lambda state: (state.can_reach_region("Entrance Plaza", self.player)
+                                    and _shutter(state))
+        set_rule(self.multiworld.get_location("Photograph PP Sticker 25", self.player), ep_shutter)
+        set_rule(self.multiworld.get_location("Photograph PP Sticker 26", self.player), ep_shutter)
+        set_rule(self.multiworld.get_location("Photograph PP Sticker 27", self.player), ep_shutter)
+        set_rule(self.multiworld.get_location("Photograph PP Sticker 28", self.player), ep_shutter)
+        set_rule(self.multiworld.get_location("Photograph PP Sticker 29", self.player), ep_shutter)
+        set_rule(self.multiworld.get_location("Photograph PP Sticker 30", self.player), ep_shutter)
+        set_rule(self.multiworld.get_location("Photograph PP Sticker 31", self.player), ep_shutter)
+        set_rule(self.multiworld.get_location("Photograph PP Sticker 32", self.player), ep_shutter)
+        set_rule(self.multiworld.get_location("Photograph PP Sticker 33", self.player), ep_shutter)
+        set_rule(self.multiworld.get_location("Photograph PP Sticker 34", self.player), ep_shutter)
 
         # PP Stickers in Al Fresca Plaza
         set_rule(self.multiworld.get_location("Photograph PP Sticker 35", self.player), lambda state: state.can_reach_region("Al Fresca Plaza", self.player))
@@ -1214,11 +1225,11 @@ class DRWorld(World):
         set_rule(self.multiworld.get_location("Rescue Gordon Stalworth", self.player), lambda state: state.can_reach_region("Al Fresca Plaza", self.player) and ((not self.options.scoop_sanity and state.has("DAY2_06_AM", self.player)) or (self.options.scoop_sanity and state.has("The Coward", self.player))))
 
         # Survivors in Entrance Plaza
-        set_rule(self.multiworld.get_location("Rescue Bill Brenton", self.player), lambda state: state.can_reach_region("Entrance Plaza", self.player) and ((not self.options.scoop_sanity and state.can_reach_location("Escort Brad to see Dr Barnaby", self.player)) or (self.options.scoop_sanity and ep_shutter(state))))
-        set_rule(self.multiworld.get_location("Rescue Wayne Blackwell", self.player), lambda state: state.can_reach_region("Entrance Plaza", self.player) and ((not self.options.scoop_sanity and state.has("DAY2_06_AM", self.player) and state.has("DAY2_11_AM", self.player) and state.can_reach_location("Meet the Hall Family", self.player) and state.can_reach_location("Escort Brad to see Dr Barnaby", self.player)) or (self.options.scoop_sanity and state.has("Mark of the Sniper", self.player) and ep_shutter(state))))
-        set_rule(self.multiworld.get_location("Rescue Jolie Wu", self.player), lambda state: state.can_reach_region("Entrance Plaza", self.player) and ((not self.options.scoop_sanity and state.has("DAY2_06_AM", self.player) and state.has("DAY2_11_AM", self.player) and state.can_reach_location("Escort Brad to see Dr Barnaby", self.player)) or (self.options.scoop_sanity and state.has("The Woman Who Didn't Make it", self.player) and ep_shutter(state))))
-        set_rule(self.multiworld.get_location("Rescue Rachel Decker", self.player), lambda state: state.can_reach_region("Entrance Plaza", self.player) and ((not self.options.scoop_sanity and state.has("DAY2_06_AM", self.player) and state.has("DAY2_11_AM", self.player) and state.can_reach_location("Escort Brad to see Dr Barnaby", self.player)) or (self.options.scoop_sanity and state.has("The Woman Who Didn't Make it", self.player) and ep_shutter(state))))
-        set_rule(self.multiworld.get_location("Rescue Floyd Sanders", self.player), lambda state: state.can_reach_region("Entrance Plaza", self.player) and ((not self.options.scoop_sanity and state.has("DAY2_06_AM", self.player) and state.has("DAY2_11_AM", self.player) and state.can_reach_location("Escort Brad to see Dr Barnaby", self.player)) or (self.options.scoop_sanity and state.has("Antique Lover", self.player) and ep_shutter(state))))
+        set_rule(self.multiworld.get_location("Rescue Bill Brenton", self.player), ep_shutter)
+        set_rule(self.multiworld.get_location("Rescue Wayne Blackwell", self.player), lambda state: ep_shutter(state) and ((not self.options.scoop_sanity and state.has("DAY2_06_AM", self.player) and state.has("DAY2_11_AM", self.player) and state.can_reach_location("Meet the Hall Family", self.player)) or (self.options.scoop_sanity and state.has("Mark of the Sniper", self.player))))
+        set_rule(self.multiworld.get_location("Rescue Jolie Wu", self.player), lambda state: ep_shutter(state) and ((not self.options.scoop_sanity and state.has("DAY2_06_AM", self.player) and state.has("DAY2_11_AM", self.player)) or (self.options.scoop_sanity and state.has("The Woman Who Didn't Make it", self.player))))
+        set_rule(self.multiworld.get_location("Rescue Rachel Decker", self.player), lambda state: ep_shutter(state) and ((not self.options.scoop_sanity and state.has("DAY2_06_AM", self.player) and state.has("DAY2_11_AM", self.player)) or (self.options.scoop_sanity and state.has("The Woman Who Didn't Make it", self.player))))
+        set_rule(self.multiworld.get_location("Rescue Floyd Sanders", self.player), lambda state: ep_shutter(state) and ((not self.options.scoop_sanity and state.has("DAY2_06_AM", self.player) and state.has("DAY2_11_AM", self.player)) or (self.options.scoop_sanity and state.has("Antique Lover", self.player))))
 
         # Survivors in Wonderland Plaza
         set_rule(self.multiworld.get_location("Rescue Greg Simpson", self.player), lambda state: state.can_reach_region("Wonderland Plaza", self.player) and state.can_reach_region("Paradise Plaza", self.player) and ((not self.options.scoop_sanity) or (self.options.scoop_sanity and state.has("Out of Control", self.player)))) # Greg Simpson is the only Wonderland Plaza Survivor with additional Logic due to him unlocking the shortcut
@@ -1273,7 +1284,7 @@ class DRWorld(World):
         set_rule(self.multiworld.get_location("Kill Jo", self.player), lambda state: state.can_reach_location("Meet Jo", self.player))
 
         set_rule(self.multiworld.get_location("Meet the Hall Family", self.player), lambda state: state.can_reach_region("Entrance Plaza", self.player) and ((not self.options.scoop_sanity and state.has("DAY2_06_AM", self.player) and state.has("DAY2_11_AM", self.player)) or (self.options.scoop_sanity and state.has("Mark of the Sniper", self.player))))
-        set_rule(self.multiworld.get_location("Kill Roger and Jack (and Thomas if you want) and chat with Wayne", self.player), lambda state: state.can_reach_location("Meet the Hall Family", self.player) and ((not self.options.scoop_sanity) or (self.options.scoop_sanity and ep_shutter(state))))
+        set_rule(self.multiworld.get_location("Kill Roger and Jack (and Thomas if you want) and chat with Wayne", self.player), lambda state: state.can_reach_location("Meet the Hall Family", self.player) and (not self.options.scoop_sanity or ep_shutter(state)))
 
         set_rule(self.multiworld.get_location("Witness Sean in Paradise Plaza", self.player), lambda state: state.can_reach_region("Paradise Plaza", self.player) and ((not self.options.scoop_sanity and state.has("DAY2_06_AM", self.player) and state.has("DAY2_11_AM", self.player)) or (self.options.scoop_sanity and (state.has("The Cult", self.player)) or (state.has("A Strange Group", self.player)))))
         set_rule(self.multiworld.get_location("Get grabbed by the raincoats", self.player), lambda state: state.can_reach_location("Witness Sean in Paradise Plaza", self.player) and state.can_reach_region("Leisure Park", self.player))
@@ -1386,10 +1397,10 @@ class DRWorld(World):
         set_rule(self.multiworld.get_location("Change into 5 new outfits", self.player), lambda state: state.can_reach_region("Paradise Plaza", self.player))
         # PP Sticker group access for the "Photograph N PP Stickers"
         # challenge rules. Each group becomes (count, regions, locations,
-        # predicate). Vanilla gates the EP block (25-34) on the Brad escort;
-        # in ScoopSanity the EP shutter opens on Meet Jessie instead, so the
-        # escort gate is swapped for ep_shutter. Savior+SS additionally
-        # drops main-scoop locations that don't exist in that mode.
+        # predicate). The Brad-escort entry in the EP group (25-34) is a
+        # marker for the EP shutter and is swapped for the mode-aware
+        # ep_shutter predicate. Savior+SS additionally drops main-scoop
+        # locations that don't exist in that mode.
         if not self.main_scoops_enabled:
             main_scoop_location_names = {
                 loc.name
@@ -1400,7 +1411,7 @@ class DRWorld(World):
         pp_sticker_groups = []
         for (count, regions, locs) in PP_STICKER_GROUPS:
             pred = None
-            if self.options.scoop_sanity and "Escort Brad to see Dr Barnaby" in locs:
+            if "Escort Brad to see Dr Barnaby" in locs:
                 locs = [l for l in locs if l != "Escort Brad to see Dr Barnaby"]
                 pred = ep_shutter
             if not self.main_scoops_enabled:
