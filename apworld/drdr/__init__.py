@@ -112,7 +112,7 @@ SCOOP_EVENTS = {
 # Region(s) the player must physically reach to complete each scoop.
 # Scoops in the Security Room (always reachable) are omitted.
 SCOOP_REGION_REQUIREMENTS = {
-    "Backup for Brad": ["Food Court", "Al Fresca Plaza", "Entrance Plaza"],
+    "Backup for Brad": ["Food Court", "Entrance Plaza"],
     "Rescue the Professor": ["Entrance Plaza", "Paradise Plaza"],
     "Medicine Run": ["Seon's Food and Stuff"],
     "Girl Hunting": ["North Plaza"],
@@ -1083,21 +1083,15 @@ class DRWorld(World):
         # PP Stickers in Entrance Plaza
         # EP shutter gate (EP stickers 25-34, EP survivors, Wayne's check).
         # Vanilla: the shutters open during the Brad escort.
-        # ScoopSanity: the EP trigger spot opens them after meeting Jessie,
-        # but the trigger is suppressed while Backup for Brad is received
-        # and incomplete, and activating a first-in-chain Backup re-closes
-        # them. Completing any main scoop leaves them open, so the
-        # guaranteed-open state is "first chain scoop completable" -- which
-        # for a Backup-first chain is the Brad escort itself.
-        # Savior+SS: no main scoops exist to suppress the trigger, so
-        # meeting Jessie (Warehouse reach) is enough.
-        if self.options.scoop_sanity and self.scoop_order:
-            _shutter_anchor = SCOOP_COMPLETION_MAP[self.scoop_order[0]]
-            _shutter = lambda state: state.can_reach_location(_shutter_anchor, self.player)
-        elif self.options.scoop_sanity:
-            _shutter = lambda state: state.can_reach_region("Warehouse", self.player)
-        else:
+        # ScoopSanity: the EP trigger spot opens them once the player has
+        # met Jessie (Warehouse reach) -- except when Backup for Brad is
+        # first in the chain, where the runtime holds the trigger until the
+        # Brad escort completes (the mission fires the cutscene itself).
+        if (not self.options.scoop_sanity
+                or (self.scoop_order and self.scoop_order[0] == "Backup for Brad")):
             _shutter = lambda state: state.can_reach_location("Escort Brad to see Dr Barnaby", self.player)
+        else:
+            _shutter = lambda state: state.can_reach_region("Warehouse", self.player)
         ep_shutter = lambda state: (state.can_reach_region("Entrance Plaza", self.player)
                                     and _shutter(state))
         set_rule(self.multiworld.get_location("Photograph PP Sticker 25", self.player), ep_shutter)

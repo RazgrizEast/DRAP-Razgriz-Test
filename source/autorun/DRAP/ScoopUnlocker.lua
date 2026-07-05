@@ -931,7 +931,7 @@ local pending_flag_clears = {}
 -- cutscene tail and never cleared), not a DRAP-side state -- save reload
 -- and new game come for free.
 --
--- Skipped while "Backup for Brad" is the player's current main scoop -- the
+-- Skipped while a first-in-chain "Backup for Brad" is pending -- the
 -- player will trigger the cutscene naturally as part of completing it, so
 -- pre-firing would just race them and steal the legitimate completion path.
 local function try_fire_ep270_in_scoop_sanity()
@@ -946,16 +946,15 @@ local function try_fire_ep270_in_scoop_sanity()
     local later_main = find_completed_main_scoop()
     if later_main then return end
 
-    -- Don't pre-fire if Backup for Brad is the player's active mission --
-    -- the natural mission flow will fire 270 itself, and our trigger
-    -- would short-circuit it. "Active" means received-but-not-completed;
-    -- we deliberately do NOT use M.get_current_chain_scoop() here because
-    -- it returns the next uncompleted main in chain order regardless of
-    -- whether the player has actually received the AP item, so a Backup
-    -- that's randomized to be the *last* AP item to arrive would
-    -- incorrectly read as "active" the entire run, blocking MOTS's
-    -- 765/2280 prereq from ever being satisfied.
-    if received_scoops["Backup for Brad"] and not completed_scoops["Backup for Brad"] then
+    -- Don't pre-fire while a FIRST-in-chain Backup for Brad is pending --
+    -- its mission flow fires 270 itself, and our trigger would race it.
+    -- A mid-chain Backup only becomes active after its chain predecessor
+    -- (a main) completes, and the completed-main skip above already
+    -- covers everything from that point on, so suppressing on a merely
+    -- received mid-chain Backup would close the shutters for no reason.
+    if scoop_order[1] == "Backup for Brad"
+        and received_scoops["Backup for Brad"]
+        and not completed_scoops["Backup for Brad"] then
         return
     end
 
