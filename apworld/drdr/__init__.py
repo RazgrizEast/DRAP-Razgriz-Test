@@ -96,6 +96,7 @@ SCOOP_EVENTS = {
     ],
     "The Last Resort": [
         "Complete Bomb Collector",
+        "Beat Drivin Carlito",
     ],
     "Hideout": [
         "Escort Isabela to Carlito's Hideout and have a chat",
