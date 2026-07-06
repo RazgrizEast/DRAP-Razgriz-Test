@@ -828,6 +828,51 @@ class DRWorld(World):
                     except KeyError:
                         _req_loc = None
 
+                # Zone-counted entries (region_counts): "Use n X" is
+                # reachable when the reachable zones' item counts sum to n,
+                # with required_regions (e.g. Seon's as the microwave food
+                # source) always needed. These locations live in Security
+                # Room so the parent region never blocks a zone
+                # alternative -- the rule does all the gating.
+                _region_counts = _entry.get("region_counts")
+                if _t == "counted" and _region_counts:
+                    _required = list(_entry.get("required_regions") or [])
+
+                    def _make_count_rule(n, counts=_region_counts,
+                                         required=_required, req_loc=_req_loc,
+                                         items_any=_items_any,
+                                         restricted_on=restricted_mode_on,
+                                         player=self.player):
+                        def rule(state):
+                            for r in required:
+                                if not state.can_reach_region(r, player):
+                                    return False
+                            if req_loc and not state.can_reach_location(req_loc, player):
+                                return False
+                            if restricted_on and items_any:
+                                if not any(state.has(it, player) for it in items_any):
+                                    return False
+                            total = 0
+                            for r, c in counts.items():
+                                if state.can_reach_region(r, player):
+                                    total += c
+                                    if total >= n:
+                                        return True
+                            return False
+                        return rule
+
+                    _targets = [(_names[_i], _i + 1)
+                                for _i in range(min(_max, len(_names)))]
+                    if len(_names) > _max:
+                        _targets.append((_names[-1], sum(_region_counts.values())))
+                    for _name, _n in _targets:
+                        try:
+                            _loc = self.multiworld.get_location(_name, self.player)
+                        except KeyError:
+                            continue
+                        set_rule(_loc, _make_count_rule(_n))
+                    continue
+
                 # Build a list of (location_name, required_regions) tuples
                 # so each location gets its own rule reflecting its tier.
                 _per_loc: List[Any] = []
