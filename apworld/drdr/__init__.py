@@ -402,9 +402,6 @@ class DRWorld(World):
         if self.options.scoop_sanity:
             create_connection("Security Room", "Entrance Plaza")
             create_connection("Paradise Plaza", "Entrance Plaza")
-            create_connection("Entrance Plaza", "Al Fresca Plaza")
-            create_connection("Al Fresca Plaza", "Food Court")
-            create_connection("Seon's Food and Stuff", "North Plaza")
 
         # Maintenance Tunnel doors work in every mode and both directions,
         # with one exception: vanilla Entrance Plaza access always comes
@@ -419,10 +416,15 @@ class DRWorld(World):
         create_connection("Maintenance Tunnel", "Leisure Park")
 
         create_connection("Al Fresca Plaza", "Entrance Plaza")
+        create_connection("Al Fresca Plaza", "Food Court")
+        create_connection("Entrance Plaza", "Al Fresca Plaza")
 
         create_connection("Food Court", "Al Fresca Plaza")
         create_connection("Food Court", "Wonderland Plaza")
+        create_connection("Food Court", "Leisure Park")
+
         create_connection("Wonderland Plaza", "North Plaza")
+        create_connection("Wonderland Plaza", "Food Court")
 
         create_connection("Leisure Park", "Food Court")
         create_connection("Leisure Park", "North Plaza")
@@ -432,6 +434,7 @@ class DRWorld(World):
         create_connection("North Plaza", "Seon's Food and Stuff")
         create_connection("North Plaza", "Crislip's Home Saloon")
         create_connection("North Plaza", "Carlito's Hideout")
+        create_connection("Seon's Food and Stuff", "North Plaza")
 
         create_connection("Carlito's Hideout", "Tunnels")
         create_connection("Leisure Park", "Tunnels")
@@ -927,8 +930,13 @@ class DRWorld(World):
             set_rule(self.multiworld.get_entrance("Leisure Park -> Maintenance Tunnel", self.player), lambda state: state.has("Maintenance Tunnel key", self.player))
             set_rule(self.multiworld.get_entrance("Food Court -> Al Fresca Plaza", self.player), lambda state: state.has("Al Fresca Plaza key", self.player))
             set_rule(self.multiworld.get_entrance("Food Court -> Wonderland Plaza", self.player), lambda state: state.has("Wonderland Plaza key", self.player))
+            set_rule(self.multiworld.get_entrance("Food Court -> Leisure Park", self.player), lambda state: state.has("Leisure Park key", self.player))
             set_rule(self.multiworld.get_entrance("Al Fresca Plaza -> Entrance Plaza", self.player), lambda state: state.has("Entrance Plaza key", self.player))
+            set_rule(self.multiworld.get_entrance("Al Fresca Plaza -> Food Court", self.player), lambda state: state.has("Food Court key", self.player))
+            set_rule(self.multiworld.get_entrance("Entrance Plaza -> Al Fresca Plaza", self.player), lambda state: state.has("Al Fresca Plaza key", self.player))
             set_rule(self.multiworld.get_entrance("Wonderland Plaza -> North Plaza", self.player), lambda state: state.has("North Plaza key", self.player))
+            set_rule(self.multiworld.get_entrance("Wonderland Plaza -> Food Court", self.player), lambda state: state.has("Food Court key", self.player))
+            set_rule(self.multiworld.get_entrance("Seon's Food and Stuff -> North Plaza", self.player), lambda state: state.has("North Plaza key", self.player))
             set_rule(self.multiworld.get_entrance("North Plaza -> Wonderland Plaza", self.player), lambda state: state.has("Wonderland Plaza key", self.player))
             set_rule(self.multiworld.get_entrance("North Plaza -> Seon's Food and Stuff", self.player), lambda state: state.has("Seon's Food and Stuff key", self.player))
             set_rule(self.multiworld.get_entrance("North Plaza -> Carlito's Hideout", self.player), lambda state: state.has("Carlito's Hideout key", self.player))
@@ -972,12 +980,6 @@ class DRWorld(World):
                                        and state.has("Entrance Plaza key", self.player))
                 set_rule(self.multiworld.get_entrance("Paradise Plaza -> Entrance Plaza", self.player),
                          lambda state: state.has("Entrance Plaza key", self.player))
-                set_rule(self.multiworld.get_entrance("Entrance Plaza -> Al Fresca Plaza", self.player),
-                         lambda state: state.has("Al Fresca Plaza key", self.player))
-                set_rule(self.multiworld.get_entrance("Al Fresca Plaza -> Food Court", self.player),
-                         lambda state: state.has("Food Court key", self.player))
-                set_rule(self.multiworld.get_entrance("Seon's Food and Stuff -> North Plaza", self.player),
-                         lambda state: state.has("North Plaza key", self.player))
 
         # "Meet Jessie in the Warehouse" is a prologue main scoop that
         # always exists (see PROLOGUE_MAIN_SCOOPS). Its rule is set outside
