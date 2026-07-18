@@ -1,0 +1,139 @@
+{
+  "locations": {
+    "Entrance Plaza Cutscene 1": {
+      "acked": false,
+      "detected_at": 1784359930,
+      "source": "check"
+    },
+    "Fall from a high height": {
+      "acked": false,
+      "detected_at": 1784360099,
+      "source": "check"
+    },
+    "Get to the stairs!": {
+      "acked": false,
+      "detected_at": 1784359982,
+      "source": "check"
+    },
+    "Help barricade the door!": {
+      "acked": false,
+      "detected_at": 1784359966,
+      "source": "check"
+    },
+    "Kill 1 psychopath": {
+      "acked": false,
+      "detected_at": 1784360436,
+      "source": "check"
+    },
+    "Kill Sean": {
+      "acked": false,
+      "detected_at": 1784360436,
+      "source": "check"
+    },
+    "Meet Jessie in the Warehouse": {
+      "acked": false,
+      "detected_at": 1784360041,
+      "source": "check"
+    },
+    "Meet Sean": {
+      "acked": false,
+      "detected_at": 1784360142,
+      "source": "check"
+    },
+    "Obtain Mall Map and Transceiver": {
+      "acked": false,
+      "detected_at": 1784359995,
+      "source": "check"
+    },
+    "Photograph PP Sticker 97": {
+      "acked": false,
+      "detected_at": 1784359909,
+      "source": "check"
+    },
+    "Reach Level 2": {
+      "acked": false,
+      "detected_at": 1784359906,
+      "source": "check"
+    },
+    "Reach Level 3": {
+      "acked": false,
+      "detected_at": 1784360439,
+      "source": "check"
+    },
+    "Reach Level 4": {
+      "acked": false,
+      "detected_at": 1784360439,
+      "source": "check"
+    },
+    "Reach Level 5": {
+      "acked": false,
+      "detected_at": 1784360439,
+      "source": "check"
+    },
+    "Reach Level 6": {
+      "acked": false,
+      "detected_at": 1784360439,
+      "source": "check"
+    },
+    "Witness Sean in Paradise Plaza": {
+      "acked": false,
+      "detected_at": 1784360059,
+      "source": "check"
+    }
+  },
+  "schema_version": 2,
+  "sections": {
+    "player_stats": {
+      "granted_skills": null,
+      "progression": "replace",
+      "stat_deltas": {
+        "attack_pct": 100,
+        "hp_max": 4000,
+        "item_buff": 0,
+        "run_level": 0,
+        "speed_mul": 0,
+        "throw_power": 0
+      }
+    },
+    "scoops": {
+      "ap_activated": true,
+      "ap_received": [
+        "A Promise to Isabela",
+        "A Strange Group",
+        "Image in the Monitor",
+        "Rescue the Professor"
+      ],
+      "completed_scoops": [
+        "A Strange Group",
+        "The Cult"
+      ],
+      "endgame_reached": false,
+      "scoop_order": [
+        "Image in the Monitor",
+        "Santa Cabeza",
+        "The Butcher",
+        "A Promise to Isabela",
+        "Rescue the Professor",
+        "Jessie's Discovery",
+        "Professor's Past",
+        "Backup for Brad",
+        "Medicine Run",
+        "The Last Resort",
+        "Hideout",
+        "Girl Hunting",
+        "A Temporary Agreement"
+      ],
+      "time_frozen": true,
+      "version": 2
+    },
+    "stickers": {
+      "captured": {
+        "226": true
+      },
+      "last_updated": 1784359909,
+      "version": 1
+    }
+  },
+  "seed": "09484665929585667970",
+  "slot": "CultTest"
+}

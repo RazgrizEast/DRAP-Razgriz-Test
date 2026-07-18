@@ -1,0 +1,232 @@
+{
+  "locations": {
+    "Complete Bomb Collector": {
+      "acked": false,
+      "detected_at": 1784364287,
+      "source": "check"
+    },
+    "Complete Santa Cabeza": {
+      "acked": false,
+      "detected_at": 1784363860,
+      "source": "check"
+    },
+    "Entrance Plaza Cutscene 1": {
+      "acked": false,
+      "detected_at": 1784363250,
+      "source": "check"
+    },
+    "Fall from a high height": {
+      "acked": false,
+      "detected_at": 1784363290,
+      "source": "check"
+    },
+    "Get 10000 PP in one photo": {
+      "acked": false,
+      "detected_at": 1784363273,
+      "source": "check"
+    },
+    "Get 50 targets in one photo": {
+      "acked": false,
+      "detected_at": 1784363273,
+      "source": "check"
+    },
+    "Get to the stairs!": {
+      "acked": false,
+      "detected_at": 1784363336,
+      "source": "check"
+    },
+    "Help barricade the door!": {
+      "acked": false,
+      "detected_at": 1784363324,
+      "source": "check"
+    },
+    "Kill 1 psychopath": {
+      "acked": false,
+      "detected_at": 1784363655,
+      "source": "check"
+    },
+    "Kill Sean": {
+      "acked": false,
+      "detected_at": 1784363654,
+      "source": "check"
+    },
+    "Meet Jessie in the Warehouse": {
+      "acked": false,
+      "detected_at": 1784363467,
+      "source": "check"
+    },
+    "Meet Sean": {
+      "acked": false,
+      "detected_at": 1784363574,
+      "source": "check"
+    },
+    "Meet back at the Security Room at 11am day 3": {
+      "acked": false,
+      "detected_at": 1784363873,
+      "source": "check"
+    },
+    "Obtain Mall Map and Transceiver": {
+      "acked": false,
+      "detected_at": 1784363346,
+      "source": "check"
+    },
+    "Photograph 10 survivors": {
+      "acked": false,
+      "detected_at": 1784363311,
+      "source": "check"
+    },
+    "Photograph PP Sticker 100": {
+      "acked": false,
+      "detected_at": 1784363374,
+      "source": "check"
+    },
+    "Photograph PP Sticker 29": {
+      "acked": false,
+      "detected_at": 1784363274,
+      "source": "check"
+    },
+    "Photograph PP Sticker 97": {
+      "acked": false,
+      "detected_at": 1784363231,
+      "source": "check"
+    },
+    "Reach Level 10": {
+      "acked": false,
+      "detected_at": 1784363657,
+      "source": "check"
+    },
+    "Reach Level 10!": {
+      "acked": false,
+      "detected_at": 1784363659,
+      "source": "check"
+    },
+    "Reach Level 11": {
+      "acked": false,
+      "detected_at": 1784363665,
+      "source": "check"
+    },
+    "Reach Level 12": {
+      "acked": false,
+      "detected_at": 1784364185,
+      "source": "check"
+    },
+    "Reach Level 2": {
+      "acked": false,
+      "detected_at": 1784363228,
+      "source": "check"
+    },
+    "Reach Level 3": {
+      "acked": false,
+      "detected_at": 1784363268,
+      "source": "check"
+    },
+    "Reach Level 4": {
+      "acked": false,
+      "detected_at": 1784363268,
+      "source": "check"
+    },
+    "Reach Level 5": {
+      "acked": false,
+      "detected_at": 1784363372,
+      "source": "check"
+    },
+    "Reach Level 6": {
+      "acked": false,
+      "detected_at": 1784363402,
+      "source": "check"
+    },
+    "Reach Level 7": {
+      "acked": false,
+      "detected_at": 1784363409,
+      "source": "check"
+    },
+    "Reach Level 8": {
+      "acked": false,
+      "detected_at": 1784363442,
+      "source": "check"
+    },
+    "Reach Level 9": {
+      "acked": false,
+      "detected_at": 1784363442,
+      "source": "check"
+    },
+    "Rescue Jeff Meyer": {
+      "acked": false,
+      "detected_at": 1784363438,
+      "source": "check"
+    },
+    "Rescue Natalie Meyer": {
+      "acked": false,
+      "detected_at": 1784363438,
+      "source": "check"
+    },
+    "Witness Sean in Paradise Plaza": {
+      "acked": false,
+      "detected_at": 1784363491,
+      "source": "check"
+    }
+  },
+  "schema_version": 2,
+  "sections": {
+    "player_stats": {
+      "granted_skills": [
+        "Jump Kick"
+      ],
+      "progression": "replace",
+      "stat_deltas": {
+        "attack_pct": 125,
+        "hp_max": 4000,
+        "item_buff": 1,
+        "run_level": 2,
+        "speed_mul": 0,
+        "throw_power": 25
+      }
+    },
+    "scoops": {
+      "ap_activated": true,
+      "ap_received": [
+        "A Strange Group",
+        "Medicine Run",
+        "Out of Control",
+        "Santa Cabeza",
+        "The Cult",
+        "The Last Resort"
+      ],
+      "completed_scoops": [
+        "A Strange Group",
+        "Santa Cabeza",
+        "The Cult",
+        "The Last Resort"
+      ],
+      "endgame_reached": false,
+      "scoop_order": [
+        "Santa Cabeza",
+        "The Last Resort",
+        "Hideout",
+        "Jessie's Discovery",
+        "A Promise to Isabela",
+        "Backup for Brad",
+        "Rescue the Professor",
+        "Professor's Past",
+        "Girl Hunting",
+        "Medicine Run",
+        "The Butcher",
+        "Image in the Monitor",
+        "A Temporary Agreement"
+      ],
+      "time_frozen": true,
+      "version": 2
+    },
+    "stickers": {
+      "captured": {
+        "174": true,
+        "223": true,
+        "226": true
+      },
+      "last_updated": 1784363374,
+      "version": 1
+    }
+  },
+  "seed": "13153843897490315498",
+  "slot": "CultTest2"
+}

@@ -1,0 +1,207 @@
+{
+    "items": [
+        {
+            "index": 0,
+            "item_id": 1232000,
+            "item_name": "DAY2_06_AM",
+            "sender": 0
+        },
+        {
+            "index": 1,
+            "item_id": 1232001,
+            "item_name": "DAY2_11_AM",
+            "sender": 0
+        },
+        {
+            "index": 2,
+            "item_id": 1232002,
+            "item_name": "DAY3_00_AM",
+            "sender": 0
+        },
+        {
+            "index": 3,
+            "item_id": 1232003,
+            "item_name": "DAY3_11_AM",
+            "sender": 0
+        },
+        {
+            "index": 4,
+            "item_id": 1232004,
+            "item_name": "DAY4_12_PM",
+            "sender": 0
+        },
+        {
+            "index": 5,
+            "item_id": 1234031,
+            "item_name": "Progressive Attack Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 6,
+            "item_id": 1234031,
+            "item_name": "Progressive Attack Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 7,
+            "item_id": 1234031,
+            "item_name": "Progressive Attack Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 8,
+            "item_id": 1234031,
+            "item_name": "Progressive Attack Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 9,
+            "item_id": 1234034,
+            "item_name": "Progressive Run Level Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 10,
+            "item_id": 1234034,
+            "item_name": "Progressive Run Level Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 11,
+            "item_id": 1234030,
+            "item_name": "Progressive Health Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 12,
+            "item_id": 1234030,
+            "item_name": "Progressive Health Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 13,
+            "item_id": 1234030,
+            "item_name": "Progressive Health Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 14,
+            "item_id": 1234030,
+            "item_name": "Progressive Health Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 15,
+            "item_id": 1233208,
+            "item_name": "A Strange Group",
+            "sender": 0
+        },
+        {
+            "index": 16,
+            "item_id": 1233002,
+            "item_name": "Image in the Monitor",
+            "sender": 1
+        },
+        {
+            "index": 17,
+            "item_id": 1234051,
+            "item_name": "Untouchable Effect",
+            "sender": 1
+        },
+        {
+            "game_item_no": 251,
+            "index": 18,
+            "item_id": 1230158,
+            "item_name": "Stuffed Bear",
+            "sender": 1
+        },
+        {
+            "index": 19,
+            "item_id": 1233012,
+            "item_name": "The Butcher",
+            "sender": 1
+        },
+        {
+            "index": 20,
+            "item_id": 1231011,
+            "item_name": "Rooftop key",
+            "sender": 1
+        },
+        {
+            "index": 21,
+            "item_id": 1234033,
+            "item_name": "Progressive Item Slot Upgrade",
+            "sender": 1
+        },
+        {
+            "game_item_no": 54,
+            "index": 22,
+            "item_id": 1230065,
+            "item_name": "Dumbbell",
+            "sender": 1
+        },
+        {
+            "game_item_no": 1,
+            "index": 23,
+            "item_id": 1230131,
+            "item_name": "Pylon",
+            "sender": 1
+        },
+        {
+            "index": 24,
+            "item_id": 1233112,
+            "item_name": "Gun Shop Standoff",
+            "sender": 1
+        },
+        {
+            "game_item_no": 305,
+            "index": 25,
+            "item_id": 1230036,
+            "item_name": "Juice [Spitfire]",
+            "sender": 1
+        },
+        {
+            "game_item_no": 220,
+            "index": 26,
+            "item_id": 1230005,
+            "item_name": "Coffee Creamer",
+            "sender": 1
+        },
+        {
+            "game_item_no": 203,
+            "index": 27,
+            "item_id": 1230154,
+            "item_name": "Steel Rack",
+            "sender": 1
+        },
+        {
+            "game_item_no": 49,
+            "index": 28,
+            "item_id": 1230069,
+            "item_name": "Fire Ax",
+            "sender": 1
+        },
+        {
+            "game_item_no": 112,
+            "index": 29,
+            "item_id": 1230022,
+            "item_name": "Rotten Pizza",
+            "sender": 1
+        },
+        {
+            "game_item_no": 181,
+            "index": 30,
+            "item_id": 1230054,
+            "item_name": "Cardboard Box",
+            "sender": 1
+        },
+        {
+            "game_item_no": 287,
+            "index": 31,
+            "item_id": 1230176,
+            "item_name": "Book [Cycling]",
+            "sender": 1
+        }
+    ],
+    "last_item_index": 31
+}

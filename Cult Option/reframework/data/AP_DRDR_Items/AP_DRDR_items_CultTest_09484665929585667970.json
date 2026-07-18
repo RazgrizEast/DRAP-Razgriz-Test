@@ -1,0 +1,189 @@
+{
+    "items": [
+        {
+            "index": 0,
+            "item_id": 1232000,
+            "item_name": "DAY2_06_AM",
+            "sender": 0
+        },
+        {
+            "index": 1,
+            "item_id": 1232001,
+            "item_name": "DAY2_11_AM",
+            "sender": 0
+        },
+        {
+            "index": 2,
+            "item_id": 1232002,
+            "item_name": "DAY3_00_AM",
+            "sender": 0
+        },
+        {
+            "index": 3,
+            "item_id": 1232003,
+            "item_name": "DAY3_11_AM",
+            "sender": 0
+        },
+        {
+            "index": 4,
+            "item_id": 1232004,
+            "item_name": "DAY4_12_PM",
+            "sender": 0
+        },
+        {
+            "index": 5,
+            "item_id": 1234030,
+            "item_name": "Progressive Health Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 6,
+            "item_id": 1234030,
+            "item_name": "Progressive Health Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 7,
+            "item_id": 1234030,
+            "item_name": "Progressive Health Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 8,
+            "item_id": 1234030,
+            "item_name": "Progressive Health Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 9,
+            "item_id": 1234031,
+            "item_name": "Progressive Attack Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 10,
+            "item_id": 1234031,
+            "item_name": "Progressive Attack Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 11,
+            "item_id": 1234031,
+            "item_name": "Progressive Attack Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 12,
+            "item_id": 1234031,
+            "item_name": "Progressive Attack Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 13,
+            "item_id": 1233208,
+            "item_name": "A Strange Group",
+            "sender": 0
+        },
+        {
+            "index": 14,
+            "item_id": 1234070,
+            "item_name": "Stomach Ache Trap",
+            "sender": 1
+        },
+        {
+            "index": 15,
+            "item_id": 1231002,
+            "item_name": "Crislip's Home Saloon key",
+            "sender": 1
+        },
+        {
+            "game_item_no": 190,
+            "index": 16,
+            "item_id": 1230109,
+            "item_name": "Molotov Cocktail",
+            "sender": 1
+        },
+        {
+            "index": 17,
+            "item_id": 1231012,
+            "item_name": "Warehouse key",
+            "sender": 1
+        },
+        {
+            "index": 18,
+            "item_id": 1233002,
+            "item_name": "Image in the Monitor",
+            "sender": 1
+        },
+        {
+            "index": 19,
+            "item_id": 1234072,
+            "item_name": "Slow Trap",
+            "sender": 1
+        },
+        {
+            "index": 20,
+            "item_id": 1234072,
+            "item_name": "Slow Trap",
+            "sender": 1
+        },
+        {
+            "index": 21,
+            "item_id": 1234075,
+            "item_name": "Special Forces Trap",
+            "sender": 1
+        },
+        {
+            "index": 22,
+            "item_id": 1231011,
+            "item_name": "Rooftop key",
+            "sender": 1
+        },
+        {
+            "index": 23,
+            "item_id": 1231013,
+            "item_name": "Wonderland Plaza key",
+            "sender": 1
+        },
+        {
+            "index": 24,
+            "item_id": 1233007,
+            "item_name": "A Promise to Isabela",
+            "sender": 1
+        },
+        {
+            "game_item_no": 229,
+            "index": 25,
+            "item_id": 1230121,
+            "item_name": "Pet Food",
+            "sender": 1
+        },
+        {
+            "game_item_no": 37,
+            "index": 26,
+            "item_id": 1230153,
+            "item_name": "Soccer Ball",
+            "sender": 1
+        },
+        {
+            "game_item_no": 102,
+            "index": 27,
+            "item_id": 1230169,
+            "item_name": "Wine Cask",
+            "sender": 1
+        },
+        {
+            "index": 28,
+            "item_id": 1233003,
+            "item_name": "Rescue the Professor",
+            "sender": 1
+        },
+        {
+            "index": 29,
+            "item_id": 1234071,
+            "item_name": "Zombait Trap",
+            "sender": 1
+        }
+    ],
+    "last_item_index": 29
+}

@@ -1,0 +1,312 @@
+{
+    "items": [
+        {
+            "index": 0,
+            "item_id": 1232000,
+            "item_name": "DAY2_06_AM",
+            "sender": 0
+        },
+        {
+            "index": 1,
+            "item_id": 1232001,
+            "item_name": "DAY2_11_AM",
+            "sender": 0
+        },
+        {
+            "index": 2,
+            "item_id": 1232002,
+            "item_name": "DAY3_00_AM",
+            "sender": 0
+        },
+        {
+            "index": 3,
+            "item_id": 1232003,
+            "item_name": "DAY3_11_AM",
+            "sender": 0
+        },
+        {
+            "index": 4,
+            "item_id": 1232004,
+            "item_name": "DAY4_12_PM",
+            "sender": 0
+        },
+        {
+            "index": 5,
+            "item_id": 1234031,
+            "item_name": "Progressive Attack Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 6,
+            "item_id": 1234031,
+            "item_name": "Progressive Attack Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 7,
+            "item_id": 1234031,
+            "item_name": "Progressive Attack Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 8,
+            "item_id": 1234031,
+            "item_name": "Progressive Attack Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 9,
+            "item_id": 1234034,
+            "item_name": "Progressive Run Level Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 10,
+            "item_id": 1234034,
+            "item_name": "Progressive Run Level Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 11,
+            "item_id": 1234030,
+            "item_name": "Progressive Health Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 12,
+            "item_id": 1234030,
+            "item_name": "Progressive Health Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 13,
+            "item_id": 1234030,
+            "item_name": "Progressive Health Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 14,
+            "item_id": 1234030,
+            "item_name": "Progressive Health Upgrade",
+            "sender": 0
+        },
+        {
+            "index": 15,
+            "item_id": 1233208,
+            "item_name": "A Strange Group",
+            "sender": 0
+        },
+        {
+            "game_item_no": 240,
+            "index": 16,
+            "item_id": 1230016,
+            "item_name": "Milk",
+            "sender": 1
+        },
+        {
+            "index": 17,
+            "item_id": 1233009,
+            "item_name": "The Last Resort",
+            "sender": 1
+        },
+        {
+            "index": 18,
+            "item_id": 1231012,
+            "item_name": "Warehouse key",
+            "sender": 1
+        },
+        {
+            "index": 19,
+            "item_id": 1234033,
+            "item_name": "Progressive Item Slot Upgrade",
+            "sender": 1
+        },
+        {
+            "index": 20,
+            "item_id": 1231007,
+            "item_name": "Leisure Park key",
+            "sender": 1
+        },
+        {
+            "game_item_no": 290,
+            "index": 21,
+            "item_id": 1230066,
+            "item_name": "Electric Guitar",
+            "sender": 1
+        },
+        {
+            "game_item_no": 21,
+            "index": 22,
+            "item_id": 1230163,
+            "item_name": "Toy Cube",
+            "sender": 1
+        },
+        {
+            "game_item_no": 102,
+            "index": 23,
+            "item_id": 1230169,
+            "item_name": "Wine Cask",
+            "sender": 1
+        },
+        {
+            "index": 24,
+            "item_id": 1231003,
+            "item_name": "Entrance Plaza key",
+            "sender": 1
+        },
+        {
+            "game_item_no": 4,
+            "index": 25,
+            "item_id": 1230043,
+            "item_name": "Baseball Bat",
+            "sender": 1
+        },
+        {
+            "index": 26,
+            "item_id": 1233211,
+            "item_name": "The Cult",
+            "sender": 1
+        },
+        {
+            "index": 27,
+            "item_id": 1234031,
+            "item_name": "Progressive Attack Upgrade",
+            "sender": 1
+        },
+        {
+            "index": 28,
+            "item_id": 1234032,
+            "item_name": "Progressive Throw Upgrade",
+            "sender": 1
+        },
+        {
+            "index": 29,
+            "item_id": 1233008,
+            "item_name": "Santa Cabeza",
+            "sender": 1
+        },
+        {
+            "index": 30,
+            "item_id": 1233004,
+            "item_name": "Medicine Run",
+            "sender": 1
+        },
+        {
+            "index": 31,
+            "item_id": 1231011,
+            "item_name": "Rooftop key",
+            "sender": 1
+        },
+        {
+            "index": 32,
+            "item_id": 1234000,
+            "item_name": "Jump Kick",
+            "sender": 1
+        },
+        {
+            "game_item_no": 26,
+            "index": 33,
+            "item_id": 1230044,
+            "item_name": "Bass Guitar",
+            "sender": 1
+        },
+        {
+            "game_item_no": 55,
+            "index": 34,
+            "item_id": 1230078,
+            "item_name": "Hanger",
+            "sender": 1
+        },
+        {
+            "game_item_no": 86,
+            "index": 35,
+            "item_id": 1230102,
+            "item_name": "Mannequin Male Left Arm",
+            "sender": 1
+        },
+        {
+            "game_item_no": 244,
+            "index": 36,
+            "item_id": 1230138,
+            "item_name": "Saw Blade",
+            "sender": 1
+        },
+        {
+            "game_item_no": 97,
+            "index": 37,
+            "item_id": 1230050,
+            "item_name": "Cactus",
+            "sender": 1
+        },
+        {
+            "game_item_no": 149,
+            "index": 38,
+            "item_id": 1230191,
+            "item_name": "Book [Japanese Conversation]",
+            "sender": 1
+        },
+        {
+            "game_item_no": 115,
+            "index": 39,
+            "item_id": 1230151,
+            "item_name": "Smokestack",
+            "sender": 1
+        },
+        {
+            "game_item_no": 66,
+            "index": 40,
+            "item_id": 1230166,
+            "item_name": "Vase",
+            "sender": 1
+        },
+        {
+            "game_item_no": 134,
+            "index": 41,
+            "item_id": 1230092,
+            "item_name": "Machinegun",
+            "sender": 1
+        },
+        {
+            "game_item_no": 272,
+            "index": 42,
+            "item_id": 1230174,
+            "item_name": "Book [Cooking]",
+            "sender": 1
+        },
+        {
+            "game_item_no": 210,
+            "index": 43,
+            "item_id": 1230003,
+            "item_name": "Cabbage",
+            "sender": 1
+        },
+        {
+            "game_item_no": 302,
+            "index": 44,
+            "item_id": 1230034,
+            "item_name": "Juice [Quickstep]",
+            "sender": 1
+        },
+        {
+            "game_item_no": 270,
+            "index": 45,
+            "item_id": 1230090,
+            "item_name": "Lipstick Prop",
+            "sender": 1
+        },
+        {
+            "index": 46,
+            "item_id": 1233205,
+            "item_name": "Out of Control",
+            "sender": 1
+        },
+        {
+            "game_item_no": 279,
+            "index": 47,
+            "item_id": 1230178,
+            "item_name": "Book [Entertainment]",
+            "sender": 1
+        }
+    ],
+    "last_item_index": 47
+}

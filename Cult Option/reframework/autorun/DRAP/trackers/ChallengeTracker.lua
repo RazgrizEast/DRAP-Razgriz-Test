@@ -1,0 +1,418 @@
+-- DRAP/trackers/ChallengeTracker.lua
+-- Tracks app.solid.SolidStorage.SolidSave (mSaveWork) fields for challenge-style goals
+
+local Shared = require("DRAP/Shared")
+
+local M = Shared.create_module("ChallengeTracker")
+
+------------------------------------------------------------
+-- Configuration
+------------------------------------------------------------
+
+local CHECK_INTERVAL_FRAMES = 240
+
+------------------------------------------------------------
+-- Singleton Manager
+------------------------------------------------------------
+
+local ss_mgr = M:add_singleton("ss", "app.solid.SolidStorage")
+
+------------------------------------------------------------
+-- Challenge Definitions
+------------------------------------------------------------
+
+local CHALLENGES = {
+    PlayerLevel = {
+        label   = "Reach Level",
+        targets = { 10, 20, 30, 40, 50 },
+        location_ids = { "Reach Level 10!", "Reach Level 20!", "Reach Level 30!", "Reach Level 40!", "Reach max level" },
+    },
+    zombieKilledHandTotal = {
+        label   = "Zombie kills by hand",
+        targets = { 50, 100 },
+        location_ids = { "Kill 50 zombies by hand", "Kill 100 zombies by hand" },
+    },
+    zombieKilledVehicleTotal = {
+        label   = "Zombie Vehicle kills",
+        targets = { 500, 1000 },
+        location_ids = { "Kill 500 zombies by vehicle", "Kill 1000 zombies by vehicle" },
+    },
+    changeClothNum = {
+        label   = "Outfit changes",
+        targets = { 5, 46 },
+        location_ids = { "Change into 5 new outfits", "Change into 46 new outfits" },
+    },
+    npcnum = {
+        label   = "Total survivors encountered",
+        targets = { 10, 50 },
+        location_ids = { "Encounter 10 survivors", "Encounter 50 survivors" },
+    },
+    NpcJoinCount = {
+        label   = "Survivors joined (ever)",
+        targets = { 50 },
+        location_ids = { "Get 50 survivors to join" },
+    },
+    zombieKill_1Play = {
+        label   = "Zombies killed",
+        targets = { 1000, 2000, 5000, 10000 },
+        location_ids = { "Kill 1000 zombies", "Kill 2000 zombies", "Kill 5000 zombies", "Kill 10000 zombies" },
+    },
+    secretForceKill = {
+        label   = "Special forces killed",
+        targets = { 10 },
+        location_ids = { "Kill 10 Special Forces" },
+    },
+    foodCourtDishFlag = {
+        label   = "Food court dishes destroyed",
+        targets = { 262143 },
+        location_ids = { "Destroy all of the wall plates in the Food Court" },
+    },
+    firedBulletCount = {
+        label   = "Bullets fired",
+        targets = { 30, 300 },
+        location_ids = { "Fire 30 bullets", "Fire 300 bullets" },
+    },
+    ZombieRideDist = {
+        label   = "Zombie ride distance",
+        targets = { 1000 },
+        location_ids = { "Ride zombies for 50 feet" },
+    },
+    indoorTime = {
+        label   = "Indoor time",
+        targets = { 300000 },
+        location_ids = { "Spend 12 hours indoors" },
+    },
+    outdoorTime = {
+        label   = "Outdoor time",
+        targets = { 300000 },
+        location_ids = { "Spend 12 hours outdoors" },
+    },
+    psychoKillNum = {
+        label   = "Psychopaths killed",
+        targets = { 1, 8 },
+        location_ids = { "Kill 1 psychopath", "Kill 8 psychopaths" },
+    },
+    cultKillNum = {
+        label   = "Cultists killed",
+        targets = { 50 },
+        location_ids = { "Kill 50 cultists" },
+    },
+    parasolHitNum_1Play = {
+        label   = "Parasol hits (1 play)",
+        targets = { 10 },
+        location_ids = { "Hit 10 zombies with a parasol" },
+    },
+    enemyRPGKillNum = {
+        label   = "RPG kills",
+        targets = { 100 },
+        location_ids = { "Kill 100 zombies with an RPG" },
+    },
+    npcPhotoCount_1Play = {
+        label   = "Survivor photos (1 play)",
+        targets = { 10, 30 },
+        location_ids = { "Photograph 10 survivors", "Photograph 30 survivors" },
+    },
+    psychoPhotoCount_1Play = {
+        label   = "Psychopath photos (1 play)",
+        targets = { 8 },
+        location_ids = { "Photograph 8 psychopaths" },
+    },
+    PPPhotoCount = {
+        label   = "PP stickers photographed (total)",
+        targets = { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 },
+        location_ids = { "Photograph 10 PP Stickers", "Photograph 20 PP Stickers", "Photograph 30 PP Stickers", "Photograph 40 PP Stickers", "Photograph 50 PP Stickers", "Photograph 60 PP Stickers", "Photograph 70 PP Stickers", "Photograph 80 PP Stickers", "Photograph 90 PP Stickers", "Photograph all PP Stickers" },
+    },
+    NPCJoinMax = {
+        label   = "Max survivors escorted at once",
+        targets = { 8 },
+        location_ids = { "Escort 8 survivors at once" },
+    },
+    FemaleNPCJoinMax = {
+        label   = "Max female survivors escorted at once",
+        targets = { 8 },
+        location_ids = { "Frank the pimp" },
+    },
+    NPCProfileMax = {
+        label   = "Survivor profiles obtained",
+        targets = { 87 },
+        location_ids = { "Build a profile for 87 survivors" },
+    },
+    ResultNPCCountMax = {
+        label   = "Survivors saved in result",
+        targets = { 10, 50 },
+        location_ids = { "Save 10 survivors", "Save 50 survivors" },
+    },
+    PhotoPointMax = {
+        label   = "Max photo PP in one shot",
+        targets = { 10000 },
+        location_ids = { "Get 10000 PP in one photo" },
+    },
+    PhotoTargetMax = {
+        label   = "Photo targets in one shot",
+        targets = { 50 },
+        location_ids = { "Get 50 targets in one photo" },
+    },
+    FallingHeightMax = {
+        label   = "Max falling height",
+        targets = { 500 },
+        location_ids = { "Fall from a high height" },
+    },
+    StrikeHitMax = {
+        label   = "Zombie bowling",
+        targets = { 5 },
+        location_ids = { "Bowl over 5 zombies" },
+    },
+    VehicleJumpDistanceMax = {
+        label   = "Vehicle jump distance",
+        targets = { 1000 },
+        location_ids = { "Jump a vehicle 50 feet" },
+    },
+    GolfMaxDistance = {
+        label   = "Longest golf shot",
+        targets = { 10000 },
+        location_ids = { "Hit a golf ball 100 feet" },
+    },
+    fullMarathonDist = {
+        label   = "Full marathon distance traveled",
+        targets = { 1054875 },
+        location_ids = { "Walk a quarter marathon" },
+    },
+}
+
+M.CHALLENGES = CHALLENGES
+
+------------------------------------------------------------
+-- Internal State
+------------------------------------------------------------
+
+local challenge_state = {}
+local save_td = nil
+local last_save_obj = nil
+local frame_counter = 0
+
+------------------------------------------------------------
+-- Public Callback
+------------------------------------------------------------
+
+M.on_challenge_threshold = nil
+
+------------------------------------------------------------
+-- Helpers
+------------------------------------------------------------
+
+local function build_threshold_id(field_name, def, i, target)
+    if def.location_ids and def.location_ids[i] then
+        return def.location_ids[i]
+    end
+    return string.format("%s_%d", field_name, target)
+end
+
+local function fire_threshold(field_name, def, state, i, target, prev, current)
+    local threshold_id = build_threshold_id(field_name, def, i, target)
+    state.reached = state.reached or {}
+    state.reached[i] = true
+
+    if M.on_challenge_threshold then
+        pcall(M.on_challenge_threshold, field_name, def, i, target, prev, current, threshold_id)
+    end
+end
+
+local function send_pp_sticker_100()
+    if AP and AP.PPStickerTracker and AP.PPStickerTracker.send_pp_sticker_100 then
+        pcall(AP.PPStickerTracker.send_pp_sticker_100)
+    end
+end
+
+local function reset_challenge_progress()
+    for _, state in pairs(challenge_state) do
+        state.last_value = nil
+        if state.reached then
+            for i = 1, #state.reached do
+                state.reached[i] = false
+            end
+        end
+    end
+end
+
+local function ensure_challenge_fields(save_obj)
+    if not save_obj then return false end
+
+    if not save_td then
+        local ok_td, td = pcall(save_obj.get_type_definition, save_obj)
+        if not ok_td or not td then return false end
+        save_td = td
+        M.log("SolidSave type: " .. (save_td:get_full_name() or "<unknown>"))
+    end
+
+    for field_name, def in pairs(CHALLENGES) do
+        local state = challenge_state[field_name]
+        if not state then
+            state = { field = nil, missing_warned = false, resolve_tries = 0, reached = {} }
+            if def.targets then
+                for i = 1, #def.targets do state.reached[i] = false end
+            end
+            challenge_state[field_name] = state
+        end
+
+        if not state.field then
+            state.resolve_tries = (state.resolve_tries or 0) + 1
+            local f = save_td:get_field(field_name)
+            if f then
+                state.field = f
+                state.missing_warned = false
+            elseif not state.missing_warned or (state.resolve_tries % 10 == 0) then
+                M.log(string.format("Field '%s' not found (try=%d)", field_name, state.resolve_tries))
+                state.missing_warned = true
+            end
+        end
+    end
+    return true
+end
+
+local function handle_challenge_progress(field_name, def, state, save_obj)
+    if not state.field or not def.targets or #def.targets == 0 then return end
+
+    local ok_val, v = pcall(state.field.get_data, state.field, save_obj)
+    if not ok_val or type(v) ~= "number" then return end
+
+    local current = v
+
+    if state.last_value == nil then
+        state.last_value = current
+        for i, target in ipairs(def.targets) do
+            if target and current >= target and not (state.reached and state.reached[i]) then
+                fire_threshold(field_name, def, state, i, target, current, current)
+            end
+        end
+        return
+    end
+
+    local prev = state.last_value
+    if current == prev then return end
+
+    if current > prev then
+        if field_name == "PPPhotoCount" then
+            local level_path = AP and AP.DoorSceneLock and AP.DoorSceneLock.CurrentLevelPath
+            local area_index = AP and AP.DoorSceneLock and AP.DoorSceneLock.CurrentAreaIndex
+            if level_path == "s231" or area_index == 535 then
+                send_pp_sticker_100()
+            end
+        end
+
+        for i, target in ipairs(def.targets) do
+            if target then
+                local already = state.reached and state.reached[i]
+                if not already and current >= target and prev < target then
+                    fire_threshold(field_name, def, state, i, target, prev, current)
+                end
+            end
+        end
+    end
+
+    state.last_value = current
+end
+
+------------------------------------------------------------
+-- Public API
+------------------------------------------------------------
+
+function M.get_state()
+    return challenge_state
+end
+
+------------------------------------------------------------
+-- Per-frame Update
+------------------------------------------------------------
+
+ss_mgr.on_instance_changed = function(old, new)
+    save_td = nil
+    last_save_obj = nil
+    reset_challenge_progress()
+end
+
+function M.on_frame()
+    frame_counter = frame_counter + 1
+    if (frame_counter % CHECK_INTERVAL_FRAMES) ~= 0 then return end
+
+    local ss = ss_mgr:get()
+    if not ss then return end
+
+    local save_field = ss_mgr:get_field("mSaveWork")
+    if not save_field then return end
+
+    local ok_save, save_obj = pcall(save_field.get_data, save_field, ss)
+    if not ok_save or save_obj == nil then return end
+
+    if save_obj ~= last_save_obj then
+        if last_save_obj then
+            M.log("SolidSave object changed. Resetting progress.")
+        else
+            M.log("SolidSave object detected.")
+        end
+        last_save_obj = save_obj
+        reset_challenge_progress()
+    end
+
+    if not ensure_challenge_fields(save_obj) then return end
+
+    for field_name, def in pairs(CHALLENGES) do
+        local state = challenge_state[field_name]
+        if state then
+            handle_challenge_progress(field_name, def, state, save_obj)
+        end
+    end
+end
+
+------------------------------------------------------------
+-- Diagnostics
+------------------------------------------------------------
+
+-- Read the current value of a tracked challenge field and report whether
+-- each target threshold has fired. Use when a tracker-driven location
+-- (e.g. "Bowl over 5 zombies") didn't fire as expected -- this answers
+-- whether the field is being read at all and whether the threshold has
+-- been seen.
+local function dump_challenge(field_name)
+    local def = CHALLENGES[field_name]
+    if not def then
+        M.log(string.format("dump: no challenge named '%s'", field_name))
+        return
+    end
+    local state = challenge_state[field_name]
+    if not state then
+        M.log(string.format("dump: %s -- no state yet (tracker hasn't seen SolidSave)", field_name))
+        return
+    end
+    local ss = ss_mgr:get()
+    local save_obj
+    if ss then
+        local sf = ss_mgr:get_field("mSaveWork")
+        if sf then
+            local ok, s = pcall(sf.get_data, sf, ss); if ok then save_obj = s end
+        end
+    end
+    local cur = "?"
+    if state.field and save_obj then
+        local ok, v = pcall(state.field.get_data, state.field, save_obj)
+        if ok and type(v) == "number" then cur = tostring(v) end
+    end
+    M.log(string.format("[%s] field_resolved=%s current=%s last_value=%s",
+        field_name, tostring(state.field ~= nil), cur, tostring(state.last_value)))
+    if def.targets then
+        for i, t in ipairs(def.targets) do
+            local loc = (def.location_ids and def.location_ids[i]) or "?"
+            M.log(string.format("  target[%d]=%d reached=%s -> %s",
+                i, t, tostring(state.reached and state.reached[i]), loc))
+        end
+    end
+end
+
+function M.dump(field_name)
+    if field_name then dump_challenge(field_name); return end
+    for name, _ in pairs(CHALLENGES) do dump_challenge(name) end
+end
+
+_G.drap_challenge_dump   = function(name) M.dump(name) end
+_G.drap_challenge_bowling = function() M.dump("StrikeHitMax") end
+
+return M
