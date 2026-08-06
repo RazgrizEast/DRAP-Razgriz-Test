@@ -50,6 +50,22 @@ class DoorRandomizerMode(Choice):
     default = 1
 
 
+class DoorLocks(Toggle):
+    """
+    When enabled (and Door Randomizer is on), the area keys still lock doors.
+    Normally every key is given to you at the start when doors are randomized,
+    because the logic tracks the vanilla layout rather than the shuffled one.
+    With this on, the logic follows the doors where they actually go and a door
+    is locked by the key for wherever it now leads.
+
+    Paired mode only, and the per-door Split Keys option is not supported yet.
+
+    Has no effect if Door Randomizer is disabled.
+    """
+    display_name = "Door Locks"
+    default = False
+
+
 class RandomizeRooftopServiceHallwayDoors(Toggle):
     """
     When enabled (and Door Randomizer is on), the doors between Rooftop and
@@ -508,6 +524,7 @@ class DROption(PerGameCommonOptions):
     restricted_item_mode: RestrictedItemMode
     door_randomizer: DoorRandomizer
     door_randomizer_mode: DoorRandomizerMode
+    door_locks: DoorLocks
     randomize_rooftop_service_hallway_doors: RandomizeRooftopServiceHallwayDoors
     scoop_sanity: ScoopSanity
     randomize_scoop_order: RandomizeScoopOrder
@@ -552,6 +569,7 @@ dr_option_groups = [
         [
             DoorRandomizer,
             DoorRandomizerMode,
+            DoorLocks,
             RandomizeRooftopServiceHallwayDoors
         ],
     ),

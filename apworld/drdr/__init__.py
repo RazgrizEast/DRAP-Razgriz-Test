@@ -10,7 +10,10 @@ from .Locations import DRLocation, DRLocationCategory, location_tables, location
 from .Options import DROption, dr_option_groups
 
 
-from .DoorRandomization import generate_door_randomization_for_ap, AREA_NAMES, EMBEDDED_DOOR_DATA
+from .DoorRandomization import (
+    generate_door_randomization_for_ap, AREA_NAMES, EMBEDDED_DOOR_DATA,
+    DOOR_MODE_PAIRED,
+)
 
 # Region names in the AP graph match AREA_NAMES values, so explain_path can go
 # from a region back to the area code the door table is keyed on.
@@ -204,6 +207,16 @@ class DRWorld(World):
                     for _n in expand_trigger_location_names(_entry):
                         self._pp_bonus_excluded_names.add(_n)
 
+        # Door Locks needs the shuffled layout in the region graph and a
+        # two-way guarantee, so it is paired mode only. Split Keys is not
+        # supported yet -- its keys name area pairs, which the shuffle breaks.
+        self.door_locks_active = bool(
+            self.options.door_randomizer
+            and self.options.door_locks
+            and self.options.door_randomizer_mode.value == DOOR_MODE_PAIRED
+            and not self.options.split_keys
+        )
+
         # If door randomizer is enabled, precollect all area keys
         if self.options.door_randomizer:
             for key_name in AREA_KEY_NAMES:
@@ -296,19 +309,71 @@ class DRWorld(World):
             "Challenges"
         ]})
 
+        # Area pairs that a real door joins in the vanilla table. Under Door
+        # Locks the shuffled builder owns every one of them, so the hardcoded
+        # vanilla calls below have to stand down -- otherwise they re-add a
+        # pair the shuffle moved, or duplicate one it already made.
+        _door_backed_pairs = {
+            (d.get("from_area_code"), d.get("to_area_code"))
+            for d in EMBEDDED_DOOR_DATA.values()
+        }
+        _connected = set()
+
         def create_connection(from_region: str, to_region: str):
+            if (from_region, to_region) in _connected:
+                return
+            if self.door_locks_active:
+                codes = (AREA_TO_CODE.get(from_region), AREA_TO_CODE.get(to_region))
+                if codes in _door_backed_pairs or codes[::-1] in _door_backed_pairs:
+                    return
+            _connected.add((from_region, to_region))
             connection = Entrance(self.player, f"{from_region} -> {to_region}", regions[from_region])
             regions[from_region].exits.append(connection)
             connection.connect(regions[to_region])
 
-        create_connection("Menu", "Heliport")
-        create_connection("Heliport", "Security Room")
-        create_connection("Security Room", "Rooftop")
-        create_connection("Rooftop", "Warehouse")
-        create_connection("Warehouse", "Paradise Plaza")
+        def create_shuffled_connections():
+            """Wire the mall from where the doors actually lead.
 
-        create_connection("Paradise Plaza", "Colby's Movieland")
-        create_connection("Paradise Plaza", "Leisure Park")
+            Without this the region graph is the vanilla layout while the
+            doors have moved, which is harmless only because every key is
+            precollected. Once a door can be locked, logic has to follow it.
+
+            Paired mode guarantees a way back, so each pair is added in both
+            directions. Regions outside the door table (Menu, the Tunnels
+            pseudo-region, Greg's passage) are wired by the caller as usual.
+            """
+            seen = set()
+            for door_id, door in EMBEDDED_DOOR_DATA.items():
+                src_code = door.get("from_area_code")
+                redirect = self.door_redirects.get(door_id)
+                dst_code = (redirect or {}).get("target_area") or door.get("to_area_code")
+                a, b = AREA_NAMES.get(src_code), AREA_NAMES.get(dst_code)
+                if not a or not b or a == b:
+                    continue
+                if a not in regions or b not in regions:
+                    continue
+                for x, y in ((a, b), (b, a)):
+                    if (x, y) in seen:
+                        continue
+                    seen.add((x, y))
+                    _connected.add((x, y))
+                    connection = Entrance(self.player, f"{x} -> {y}", regions[x])
+                    regions[x].exits.append(connection)
+                    connection.connect(regions[y])
+            return len(seen)
+
+        create_connection("Menu", "Heliport")
+
+        if self.door_locks_active:
+            create_shuffled_connections()
+        else:
+            create_connection("Heliport", "Security Room")
+            create_connection("Security Room", "Rooftop")
+            create_connection("Rooftop", "Warehouse")
+            create_connection("Warehouse", "Paradise Plaza")
+
+            create_connection("Paradise Plaza", "Colby's Movieland")
+            create_connection("Paradise Plaza", "Leisure Park")
 
         # ScoopSanity-only entrances:
         #   * Security Room -> Entrance Plaza opens after the player meets
