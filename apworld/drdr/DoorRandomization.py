@@ -413,13 +413,21 @@ class DoorRandomizer:
             if not self.can_escape_all_areas(graph):
                 continue
 
-            # Verify bidirectionality
+            # Verify bidirectionality.
+            #
+            # Protected areas are exempt because their edges are not shuffled
+            # -- except the ones the caller opted in. ScoopSanity puts the
+            # Security Room <-> Entrance Plaza pair into the pool, and it used
+            # to be shuffled without ever being checked here, so one direction
+            # could be redirected while the other stayed vanilla. That left a
+            # one-way trip in roughly one paired seed in ten.
             is_bidirectional = True
             for from_area, to_areas in graph.items():
-                if from_area in PROTECTED_AREAS:
-                    continue
                 for to_area in to_areas:
-                    if to_area in PROTECTED_AREAS:
+                    opted_in = ((from_area, to_area) in self.scoop_sanity_unlocked_edges
+                                or (to_area, from_area) in self.scoop_sanity_unlocked_edges)
+                    if not opted_in and (from_area in PROTECTED_AREAS
+                                         or to_area in PROTECTED_AREAS):
                         continue
                     if from_area not in graph.get(to_area, set()):
                         is_bidirectional = False
