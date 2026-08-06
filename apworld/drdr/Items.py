@@ -483,12 +483,16 @@ progression_skills = {
 }
 
 
-def BuildItemPool(multiworld, count, options, excluded_scoop_names=()):
+def BuildItemPool(multiworld, count, options, excluded_scoop_names=(),
+                  door_locks_active=False):
     """Build the item pool for this world.
 
     excluded_scoop_names: iterable of scoop item names to omit from the pool
     even when ScoopSanity is enabled. Used by the Savior goal to drop main
     scoops (they would advance story state the goal doesn't need).
+
+    door_locks_active: keep the area keys in the pool under door
+    randomization instead of dropping them as precollected.
     """
     item_pool = []
     included_itemcount = 0
@@ -564,7 +568,11 @@ def BuildItemPool(multiworld, count, options, excluded_scoop_names=()):
         # Area keys are precollected under door randomization, and replaced by
         # the per-door keys under Split Keys
         if (options.door_randomizer or options.split_keys) and lock.name in area_key_names:
-            continue
+            # Door Locks is the exception -- the area keys are what the locks
+            # check, so they have to come from the pool. The Access Key opens
+            # the tunnel doors rather than an area and stays precollected.
+            if not door_locks_active or lock.name == "Maintenance Tunnel Access Key":
+                continue
         # Skip time keys if scoop sanity is enabled
         if options.scoop_sanity and lock.name in time_key_names:
             continue

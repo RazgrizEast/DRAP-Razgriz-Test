@@ -15,8 +15,10 @@ from rule_builder.rules import (
     True_,
 )
 
+from .DoorRandomization import AREA_NAMES, EMBEDDED_DOOR_DATA
 from .Locations import DRLocationCategory, location_tables
 from .shared_data import (
+    AREA_KEY_NAMES,
     SCOOP_COMPLETION_MAP, SCOOP_EVENTS, SCOOP_REGION_REQUIREMENTS,
     SCOOP_SPLIT_KEY_DOORS as SPLIT_KEY_SCOOP_DOORS,
     AP_TRIGGER_LOCATIONS, expand_trigger_location_names,
@@ -424,6 +426,58 @@ def set_rules(world) -> None:
                               And(Has("Rooftop Key"), Has("Warehouse Key"), Has("Entrance Plaza Key")))
                 world.set_rule(world.multiworld.get_entrance("Paradise Plaza -> Entrance Plaza", world.player),
                               Has("Entrance Plaza Key"))
+
+    elif world.door_locks_active:
+        # Door Locks. The shuffle moves where a door leads, so the door has no
+        # fixed identity left to hang a key on -- but the area it lands in
+        # does. Every way into a keyed area needs that area's key, whichever
+        # door the player walked through to get there.
+        _keyed = set(AREA_KEY_NAMES)
+
+        def _dest_key(region_name, also=None):
+            _rule = Has(f"{region_name} Key") if f"{region_name} Key" in _keyed else True_()
+            return And(_rule, also) if also is not None else _rule
+
+        for _entrance in world.multiworld.get_entrances(world.player):
+            if _entrance.connected_region:
+                world.set_rule(_entrance, _dest_key(_entrance.connected_region.name))
+
+        # Greg's passage isn't in the door table, so the shuffle leaves it
+        # where it is and it keeps its scoop gate.
+        for _from, _to in (("Paradise Plaza", "Wonderland Plaza"),
+                           ("Wonderland Plaza", "Paradise Plaza")):
+            world.set_rule(world.multiworld.get_entrance(f"{_from} -> {_to}", world.player),
+                          _dest_key(_to, CanReachLocation("Kill Adam")))
+
+        # The Security Room <-> Entrance Plaza doors stay shut until the
+        # Jessie cutscene plays. The shuffle changes where they lead, not when
+        # they open, so the gate travels with the door to wherever it landed.
+        if world.options.scoop_sanity:
+            # Which doors produce each region pair, so a shared landing is not
+            # gated on behalf of a door the player never has to use.
+            _producers = {}
+            for _id, _door in EMBEDDED_DOOR_DATA.items():
+                _src = AREA_NAMES.get(_door.get("from_area_code"))
+                _redirect = world.door_redirects.get(_id)
+                _dst = AREA_NAMES.get((_redirect or {}).get("target_area")
+                                      or _door.get("to_area_code"))
+                if _src and _dst and _src != _dst:
+                    _producers.setdefault((_src, _dst), []).append(_id)
+                    _producers.setdefault((_dst, _src), []).append(_id)
+
+            for _id, _door in EMBEDDED_DOOR_DATA.items():
+                _src = AREA_NAMES.get(_door.get("from_area_code"))
+                if {_src, AREA_NAMES.get(_door.get("to_area_code"))} != \
+                        {"Security Room", "Entrance Plaza"}:
+                    continue
+                _redirect = world.door_redirects.get(_id)
+                _dst = AREA_NAMES.get((_redirect or {}).get("target_area")
+                                      or _door.get("to_area_code"))
+                for _pair in ((_src, _dst), (_dst, _src)):
+                    if _producers.get(_pair) != [_id]:
+                        continue      # another door gets there without Jessie
+                    world.set_rule(world.multiworld.get_entrance(f"{_pair[0]} -> {_pair[1]}", world.player),
+                                  _dest_key(_pair[1], CanReachLocation("Meet Jessie in the Warehouse")))
 
 
     # --------------------------------------------------------------------
