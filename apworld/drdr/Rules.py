@@ -449,22 +449,19 @@ def set_rules(world) -> None:
             world.set_rule(world.multiworld.get_entrance(f"{_from} -> {_to}", world.player),
                           _dest_key(_to, CanReachLocation("Kill Adam")))
 
-        # The Security Room <-> Entrance Plaza doors stay shut until the
-        # Jessie cutscene plays. The shuffle changes where they lead, not when
-        # they open, so the gate travels with the door to wherever it landed.
+        # The Security Room <-> Entrance Plaza doors are barricaded until the
+        # Jessie cutscene plays, and under ScoopSanity they are the only way
+        # out of the safe room besides the Rooftop stairs. The shuffle changes
+        # where they lead, not when they open, so the gate travels with the
+        # door to wherever it landed -- without it the fill will happily put
+        # the Warehouse Key behind a door that only Jessie opens, and Jessie
+        # is in the Warehouse.
+        #
+        # Gating both ends can catch a pair some ordinary door also joins, but
+        # the mall is only enterable through the Warehouse, so Jessie is always
+        # reachable by the time that matters and the extra gate never binds.
+        # Under-gating deadlocks the seed; over-gating costs nothing.
         if world.options.scoop_sanity:
-            # Which doors produce each region pair, so a shared landing is not
-            # gated on behalf of a door the player never has to use.
-            _producers = {}
-            for _id, _door in EMBEDDED_DOOR_DATA.items():
-                _src = AREA_NAMES.get(_door.get("from_area_code"))
-                _redirect = world.door_redirects.get(_id)
-                _dst = AREA_NAMES.get((_redirect or {}).get("target_area")
-                                      or _door.get("to_area_code"))
-                if _src and _dst and _src != _dst:
-                    _producers.setdefault((_src, _dst), []).append(_id)
-                    _producers.setdefault((_dst, _src), []).append(_id)
-
             for _id, _door in EMBEDDED_DOOR_DATA.items():
                 _src = AREA_NAMES.get(_door.get("from_area_code"))
                 if {_src, AREA_NAMES.get(_door.get("to_area_code"))} != \
@@ -473,11 +470,11 @@ def set_rules(world) -> None:
                 _redirect = world.door_redirects.get(_id)
                 _dst = AREA_NAMES.get((_redirect or {}).get("target_area")
                                       or _door.get("to_area_code"))
-                for _pair in ((_src, _dst), (_dst, _src)):
-                    if _producers.get(_pair) != [_id]:
-                        continue      # another door gets there without Jessie
-                    world.set_rule(world.multiworld.get_entrance(f"{_pair[0]} -> {_pair[1]}", world.player),
-                                  _dest_key(_pair[1], CanReachLocation("Meet Jessie in the Warehouse")))
+                if not _dst or _dst == _src:
+                    continue
+                for _a, _b in ((_src, _dst), (_dst, _src)):
+                    world.set_rule(world.multiworld.get_entrance(f"{_a} -> {_b}", world.player),
+                                  _dest_key(_b, CanReachLocation("Meet Jessie in the Warehouse")))
 
 
     # --------------------------------------------------------------------

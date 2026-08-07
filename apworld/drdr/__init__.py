@@ -2,6 +2,7 @@
 from typing import Any, Dict, Set, List
 
 from BaseClasses import MultiWorld, Region, Item, Entrance, Tutorial, ItemClassification
+from Options import OptionError
 
 from worlds.AutoWorld import World, WebWorld
 
@@ -217,6 +218,19 @@ class DRWorld(World):
             and self.options.door_randomizer_mode.value == DOOR_MODE_PAIRED
             and not self.options.split_keys
         )
+
+        # Under ScoopSanity the mall opens off the Security Room door, and that
+        # door only opens after Jessie -- who is in the Warehouse. So the route
+        # to her has to be the one route the shuffle cannot move, or the seed
+        # can put her key behind her own door.
+        if (self.door_locks_active and self.options.scoop_sanity
+                and self.options.randomize_rooftop_service_hallway_doors):
+            raise OptionError(
+                f"{self.player_name}: Door Locks with ScoopSanity needs the "
+                "Rooftop and Warehouse doors left alone -- meeting Jessie is "
+                "what opens the way into the mall, and she is behind those "
+                "doors. Turn off randomize_rooftop_service_hallway_doors."
+            )
 
         # If door randomizer is enabled, precollect all area keys
         if self.options.door_randomizer:
