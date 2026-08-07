@@ -705,6 +705,43 @@ class DRWorld(World):
 
         return {code: sorted(targets) for code, targets in sorted(graph.items()) if targets}
 
+    def _door_locks_anchors(self) -> Dict[str, List[Dict[str, Any]]]:
+        """{scene_code: [{x, z, vanilla, to}]} -- where each door stands on the
+        side the player walks up to, and where it now leads.
+
+        Door Locks disables a locked door's hit data, so the game shows no
+        prompt and the overlay that names the real destination never fires --
+        the player cannot see where a door goes until after they open it. The
+        mod falls back to standing near the door instead, which needs a
+        position per door.
+
+        A door's recorded position is on the far side (it is where the player
+        lands coming through), so the near-side spot is the reverse door's
+        landing position. Checked against the two hand-captured
+        Wonderland/North Plaza anchors: within 4.4 units, for doorways 93
+        apart.
+        """
+        by_key = {(d.get("from_area_code"), d.get("to_area_code"), d.get("door_no", 0)): d
+                  for d in EMBEDDED_DOOR_DATA.values()}
+
+        out: Dict[str, List[Dict[str, Any]]] = {}
+        for door_id, door in EMBEDDED_DOOR_DATA.items():
+            src, vanilla = door.get("from_area_code"), door.get("to_area_code")
+            door_no = door.get("door_no", 0)
+            reverse = by_key.get((vanilla, src, door_no)) or by_key.get((vanilla, src, 0))
+            position = (reverse or {}).get("position")
+            if not (src and vanilla and position):
+                continue
+            redirect = self.door_redirects.get(door_id)
+            actual = (redirect or {}).get("target_area") or vanilla
+            out.setdefault(src, []).append({
+                "x": round(position["x"], 2),
+                "z": round(position["z"], 2),
+                "vanilla": AREA_NAMES.get(vanilla, vanilla),
+                "to": AREA_NAMES.get(actual, actual),
+            })
+        return out
+
     def _build_door_overlay_data(self) -> Dict[str, Dict[str, str]]:
         """{scene_code: {vanilla_dest_name: actual_dest_name}} for the Lua
         DoorPromptOverlay. Source ids are 'SCN_<scene>|<vanilla_target>|door<n>';
@@ -869,6 +906,11 @@ class DRWorld(World):
             "door_randomizer_mode": door_randomizer_mode,  # For Lua: 0 = chaos, 1 = paired
             "door_redirects": self.door_redirects if door_randomizer_enabled else {},
             "door_locks": self.door_locks_active,
+            # Per-door positions so the overlay can name a destination the
+            # player cannot get a prompt for. Only needed under Door Locks.
+            "door_anchors": (
+                self._door_locks_anchors() if self.door_locks_active else {}
+            ),
             # Where the doors actually lead. Only sent under Door Locks, where
             # the vanilla graph in shared data would answer the wrong question.
             "area_graph": (

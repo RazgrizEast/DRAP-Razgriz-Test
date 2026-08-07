@@ -504,10 +504,14 @@ local function run_slot_connect(slot_data)
     -- The overlay shows whenever the player approaches a door whose
     -- destination has been redirected for this seed. Empty table when
     -- door_randomizer is off, in which case setup() disables cleanly.
+    -- Under Door Locks a locked door raises no prompt at all, so the overlay
+    -- also takes per-door positions and answers on proximity instead.
     if AP.effects.DoorPromptOverlay then
         local overlay = (type(slot_data) == "table"
                          and slot_data.door_overlay_data) or {}
-        AP.effects.DoorPromptOverlay.setup(overlay)
+        local anchors = (type(slot_data) == "table"
+                         and slot_data.door_anchors) or {}
+        AP.effects.DoorPromptOverlay.setup(overlay, anchors)
     end
 
     -- Re-apply time freeze if needed (ScoopSanity only -- handles mid-game reconnect

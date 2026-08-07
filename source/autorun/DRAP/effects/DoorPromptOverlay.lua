@@ -21,6 +21,7 @@ local log = Shared.create_logger("DoorOverlay")
 local _state = {
     enabled            = false,
     redirects_by_scene = {},   -- scene_code -> { [vanilla_dest_name] = actual_dest_name }
+    anchors_by_scene   = {},   -- scene_code -> { {x, z, vanilla, to}, ... } (Door Locks)
     last_seen          = {},   -- door_guid_str -> os.clock() of last setElement fire
     active_guid        = nil,  -- current "in view" door Guid (or nil)
     last_shown_text    = nil,  -- text most recently sent (re-fire only on change)
@@ -241,16 +242,94 @@ local function build_overlay_text(vanilla_name, actual_name)
     return v .. " -> " .. a
 end
 
+-- Send, honouring the change/refresh throttle. Both the signboard path and
+-- the proximity fallback go through here so a toast cannot be sent twice.
+local function send_overlay(text)
+    local now = os.clock()
+    if _state.last_shown_text == text
+       and (now - _state.last_shown_at) < _state.refresh_interval then
+        return true
+    end
+    if Notify.send(text, { duration = _state.notify_duration }) then
+        _state.diag_show_calls = _state.diag_show_calls + 1
+        _state.last_shown_text = text
+        _state.last_shown_at = now
+        return true
+    end
+    _state.diag_skipped_calls = _state.diag_skipped_calls + 1
+    return false
+end
+
+------------------------------------------------------------
+-- Proximity fallback
+--
+-- A locked door has its hit data disabled, so the game raises no signboard
+-- and the hook above never fires -- leaving the player no way to find out
+-- where a door goes until they have already unlocked it. Standing near the
+-- door answers instead, using the per-door anchors from slot data.
+--
+-- Only used when the signboard is absent, so an openable door still gets its
+-- prompt-driven toast and nothing fires twice.
+------------------------------------------------------------
+
+-- Radius around a door anchor, squared. Anchors sit within ~4.5 units of where
+-- the player stands to use the door, so this triggers without having to be on
+-- top of it.
+--
+-- The Food Court's tunnel and Wonderland doorways are only 8.8 apart, closer
+-- than any radius worth using, so the nearest anchor wins rather than the
+-- first in range. Standing at either door that picks the right one; standing
+-- exactly between them it may name the neighbour until the player steps
+-- toward one.
+local ANCHOR_RADIUS_SQ = 8.0 * 8.0
+
+local function nearest_anchor(scene, px, pz)
+    local list = scene and _state.anchors_by_scene[scene] or nil
+    if not list then return nil end
+    local best, best_d2 = nil, ANCHOR_RADIUS_SQ
+    for _, anchor in ipairs(list) do
+        local dx, dz = px - anchor.x, pz - anchor.z
+        local d2 = dx * dx + dz * dz
+        if d2 <= best_d2 then best, best_d2 = anchor, d2 end
+    end
+    return best
+end
+
+local function show_nearby_door()
+    if next(_state.anchors_by_scene) == nil then return end
+    local px, pz = get_player_xz()
+    if px == nil then return end
+
+    local anchor = nearest_anchor(get_current_scene_code(), px, pz)
+    if not anchor then
+        _state.last_shown_text = nil
+        return
+    end
+
+    -- Unlike the prompt path there is no vanilla signboard to defer to, so an
+    -- unredirected door still gets named -- just its own destination.
+    local text
+    if anchor.to ~= anchor.vanilla then
+        text = build_overlay_text(anchor.vanilla, anchor.to)
+    else
+        text = Notify.span(anchor.to, "location", true)
+    end
+    send_overlay(text)
+end
+
 local function update_overlay()
     if not _state.enabled then return end
     local guid = pick_active_guid()
     local guid_changed = (guid ~= _state.active_guid)
     _state.active_guid = guid
 
-    -- No door in view: drop our state. Toast (if any) auto-hides via Notify.
+    -- No door in view. Either there is genuinely none, or the door is locked
+    -- and raises no prompt -- so fall back to standing near one before
+    -- dropping our state.
     if guid == nil then
-        if _state.last_shown_text ~= nil then
-            _state.last_shown_text = nil
+        local had_text = _state.last_shown_text ~= nil
+        show_nearby_door()
+        if had_text and _state.last_shown_text == nil then
             log("active door cleared")
         end
         return
@@ -287,28 +366,14 @@ local function update_overlay()
         return
     end
 
-    local text = build_overlay_text(vanilla_name, actual_name)
-    local now = os.clock()
-    local need_send =
-        _state.last_shown_text ~= text
-        or (now - _state.last_shown_at) >= _state.refresh_interval
-    if not need_send then return end
-
-    local ok = Notify.send(text, { duration = _state.notify_duration })
-    if ok then
-        _state.diag_show_calls = _state.diag_show_calls + 1
-        _state.last_shown_text = text
-        _state.last_shown_at = now
+    if send_overlay(build_overlay_text(vanilla_name, actual_name)) then
         if guid_changed then
             log(string.format("active door '%s' redirected -> '%s' (scene=%s) toast sent",
                 vanilla_name, actual_name, tostring(scene)))
         end
-    else
-        _state.diag_skipped_calls = _state.diag_skipped_calls + 1
-        if guid_changed then
-            log(string.format("active door '%s' redirected -> '%s' but Notify.send failed -- will retry",
-                vanilla_name, actual_name))
-        end
+    elseif guid_changed then
+        log(string.format("active door '%s' redirected -> '%s' but Notify.send failed -- will retry",
+            vanilla_name, actual_name))
     end
 end
 
@@ -338,17 +403,33 @@ end)
 ------------------------------------------------------------
 
 -- Called from AP_DRDR_main on slot connect. Pass nil/empty to disable.
-function M.setup(door_overlay_data)
-    if type(door_overlay_data) ~= "table"
-       or next(door_overlay_data) == nil then
+-- door_anchors is the Door Locks per-door position table; without it the
+-- overlay only answers when the game raises a prompt.
+function M.setup(door_overlay_data, door_anchors)
+    local have_overlay = type(door_overlay_data) == "table"
+                         and next(door_overlay_data) ~= nil
+    local have_anchors = type(door_anchors) == "table"
+                         and next(door_anchors) ~= nil
+
+    if not (have_overlay or have_anchors) then
         _state.enabled = false
         _state.redirects_by_scene = {}
+        _state.anchors_by_scene = {}
         _state.last_shown_text = nil
         log("disabled (no door redirects this seed)")
         return
     end
-    _state.redirects_by_scene = door_overlay_data
+    _state.redirects_by_scene = have_overlay and door_overlay_data or {}
+    _state.anchors_by_scene = have_anchors and door_anchors or {}
     _state.enabled = true
+
+    if have_anchors then
+        local anchor_count = 0
+        for _, list in pairs(_state.anchors_by_scene) do
+            anchor_count = anchor_count + #list
+        end
+        log(string.format("proximity fallback armed with %d door anchors", anchor_count))
+    end
     install_hook()
     local scene_count, redirect_count = 0, 0
     for _, t in pairs(door_overlay_data) do
