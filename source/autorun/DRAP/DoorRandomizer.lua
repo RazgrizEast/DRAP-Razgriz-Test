@@ -387,6 +387,11 @@ local function install_hook()
 
                     M.last_transition = {
                         door_id = door_id,
+                        -- Stamped so consumers can tell a live door crossing
+                        -- from a stale record: this table persists until the
+                        -- NEXT jump, but the transition it describes is over
+                        -- within seconds.
+                        at = os.clock(),
                         vanilla = {
                             area_no = vanilla_area_no,
                             area_no_old = vanilla_area_no_old,

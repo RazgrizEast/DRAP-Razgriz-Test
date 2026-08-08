@@ -13,6 +13,11 @@ local M = Shared.create_module("NpcCarryOver")
 local NPC_MANAGER_TYPE = "app.solid.gamemastering.NpcManager"
 local NPC_PROXIMITY_THRESHOLD = 5.0  -- Max distance per axis for NPC to follow
 
+-- A door crossing's carry-over pass runs within a couple of seconds of the
+-- jump. Beyond this, a checkCarryOverNpc call belongs to something else
+-- (cutscene, safety-area replacement) and must not see the old door's areas.
+local STALE_TRANSITION_SECONDS = 10.0
+
 ------------------------------------------------------------
 -- State
 ------------------------------------------------------------
@@ -161,14 +166,36 @@ local function install_hooks()
     local hook1_ok = pcall(function()
         sdk.hook(
             check_carry_over_method,
-            -- PRE: Spoof args to vanilla so game's validation passes
+            -- PRE: Spoof args to vanilla so game's validation passes.
+            --
+            -- Argument order is destination first, then the area being left.
+            -- That contradicts the dumped signature
+            -- (probes/managers/NpcManager.txt:112):
+            --   checkCarryOverNpc(UInt16 oldArea, UInt16 nextArea, UInt32 door)
+            -- and it was "corrected" to match on 2026-08-08. That broke
+            -- carry-over outright: every crossing afterwards marked ZERO
+            -- records (NpcSaveGuard census carry=0 on four consecutive
+            -- redirected doors, against carry=10 before), and the party was
+            -- left behind. Reverted the same day.
+            --
+            -- So the dumped parameter NAMES are not reliable here -- only the
+            -- observed behaviour is. Do not "fix" this order again without a
+            -- crossing that proves it: the census carry count on the autosave
+            -- right after a door is the measurement.
+            --
+            -- The transition must also be FRESH: last_transition persists
+            -- until the next door, so without the age check any engine
+            -- checkCarryOverNpc call minutes later (cutscene and safety-area
+            -- flows call it too) was spoofed with a long-dead door crossing.
             function(args)
                 local tr = nil
                 if AP and AP.DoorRandomizer and AP.DoorRandomizer.get_last_transition then
                     tr = AP.DoorRandomizer.get_last_transition()
                 end
 
-                if tr and tr.randomized and tr.randomized.was_redirected and tr.vanilla then
+                if tr and tr.randomized and tr.randomized.was_redirected
+                    and tr.vanilla and tr.at
+                    and (os.clock() - tr.at) <= STALE_TRANSITION_SECONDS then
                     local v_new = tr.vanilla.area_no
                     local v_old = tr.vanilla.area_no_old
                     if v_new then pcall(function() args[3] = sdk.to_ptr(v_new) end) end
@@ -183,7 +210,9 @@ local function install_hooks()
                     tr = AP.DoorRandomizer.get_last_transition()
                 end
 
-                if tr and tr.randomized and tr.randomized.was_redirected then
+                if tr and tr.randomized and tr.randomized.was_redirected
+                    and tr.at
+                    and (os.clock() - tr.at) <= STALE_TRANSITION_SECONDS then
                     -- checkCarryOverNpc returns System.Void, so retval holds
                     -- leftover register garbage -- never a usable list. Read
                     -- the manager's NpcInfoList directly; the JOIN+area+
