@@ -412,6 +412,64 @@ local function reset_health(info)
     end
 end
 
+-- The engine's "joined" is NOT mLiveState=2. Durable join state, per the SDK
+-- dump (NpcBaseInfo.ATTRIBUTE enum + NPC_STORAGE_BASE_INFO layout):
+--   * ATTR_HAVE_JOINED (0x80) in mAttribute -- what haveJoined() reads;
+--   * mJoinNo, a persisted join ordinal (fresh spawn records read 0),
+--     plausibly assigned from NpcManager.mJoinCount at natural recruitment.
+-- A record with only mLiveState=JOIN is a chimera: the follower AI and
+-- escort counter accept it, but the transition transport (isCarryOverNpc ->
+-- carry-over appear-point spawn) does not -- the body is left behind at
+-- doors while the record moves, and the engine then spawns a duplicate body
+-- for the relocated record. Field-observed 2026-08-07 ("5 Nicks, 1 record").
+local ATTR_HAVE_JOINED = 0x80
+
+-- Establish the engine's real join state on a record we are promoting.
+-- setAttribute(bit, on) is tried first (engine's own path); raw field OR is
+-- the fallback; haveJoined() is the arbiter either way.
+local function complete_join_state(info, mgr, label)
+    local attr, join_no = 0, 0
+    pcall(function() attr = tonumber(info:get_field("mAttribute")) or 0 end)
+    pcall(function() join_no = tonumber(info:get_field("mJoinNo")) or 0 end)
+
+    local joined
+    pcall(function() joined = info:call("haveJoined") end)
+    if joined ~= true then
+        pcall(function() info:call("setAttribute", ATTR_HAVE_JOINED, true) end)
+        pcall(function() joined = info:call("haveJoined") end)
+        if joined ~= true then
+            pcall(function()
+                info:set_field("mAttribute", attr | ATTR_HAVE_JOINED)
+            end)
+            pcall(function() joined = info:call("haveJoined") end)
+        end
+    end
+
+    local assigned = join_no
+    if join_no == 0 then
+        local count
+        pcall(function() count = tonumber(mgr:get_field("mJoinCount")) end)
+        if count then
+            assigned = count + 1
+            pcall(function() info:set_field("mJoinNo", assigned) end)
+            pcall(function() mgr:set_field("mJoinCount", assigned) end)
+        end
+    end
+
+    local attr_now = attr
+    pcall(function() attr_now = tonumber(info:get_field("mAttribute")) or attr end)
+    M.log(string.format(
+        "%s: join state completed -- attr 0x%X -> 0x%X, joinNo %d -> %d,"
+            .. " haveJoined=%s",
+        label, attr, attr_now, join_no, assigned, tostring(joined)))
+    if joined ~= true then
+        M.log.warn(string.format(
+            "%s: haveJoined() still false after promotion -- the engine may"
+                .. " not transport this member at area transitions; capture"
+                .. " drap_npc_compare against a natural member", label))
+    end
+end
+
 -- Put a healthy record into the player's party. setLiveState(JOIN) alone is
 -- NOT enough: SceneFixups gates the safe-room rescue cutscene on
 -- getEscortNpcNum() > 0, so a survivor who is JOIN but not escort-registered
@@ -425,6 +483,7 @@ local function promote_to_join(info, label)
     local before = get_escort_count()
     pcall(function() info:call("setLiveState", LIVE_STATE_JOIN) end)
     local ok = pcall(function() mgr:call("setEscortEnable", info) end)
+    complete_join_state(info, mgr, label)
     local after = get_escort_count()
     local lead
     pcall(function() lead = info:call("isLeadEnable") end)
@@ -448,11 +507,29 @@ local function move_to_player(info)
         local ok = pcall(function() info:call("setPos", v) end)
         if not ok then pcall(function() info:set_field("mPos", v) end) end
     end
-    pcall(function() info:set_field("mCarryOverFlag", true) end)
+    -- Deliberately NOT setting mCarryOverFlag: that flag means "in transit,
+    -- spawn me via the carry-over appear point on area load" and is consumed
+    -- by that spawn. This record's body is live in the CURRENT area, so the
+    -- flag could never be consumed and every healthy standing NPC reads it
+    -- false -- a lingering true is exactly the abnormal state this rework is
+    -- eliminating. (The old write "mirrored" NpcCarryover.rewrite_single_npc,
+    -- which runs inside a transition where the flag is correct.)
     return true
 end
 
 local spawn_pending = {}   -- stype -> { started, entry, scoop, join, at_player }
+
+-- One retry per stype for a respawn that comes back dead. Kept outside
+-- spawn_pending because the retry replaces that entry. Cleared when the
+-- survivor finally stands up, so a later repair gets its own attempt.
+local respawn_retried = {}
+-- 6s, not 3: in the field (drap_20260807_143421.log) both first attempts
+-- read dead at exactly the 3.0s check and both retries went live in 2s --
+-- the engine was still initialising when the retry cleared the record out
+-- from under it, and each preempted attempt leaves a dead husk body at the
+-- spawn point as scenery. Waiting longer costs a few seconds on a genuine
+-- failure; preempting a good spawn costs a corpse prop and a wasted attempt.
+local DEAD_ON_ARRIVAL_SECONDS = 6.0
 
 --- @param join boolean respawn them already in the player's party
 --- @param at_player boolean spawn at the player instead of the DB spawn point
@@ -499,7 +576,21 @@ local function spawn_at(stype, entry, scoop_name, forced, verdict, join, at_play
 
     -- Must precede the spawn: isDead persists across respawns of a stype, and
     -- neither setVitalFull nor fullRecover clears it.
+    --
+    -- And nothing may be created in its place before spawnNPC runs. A
+    -- createInformation(stype, 0) call used to sit here ("give the spawn a
+    -- record to bind to") and it made every respawn fail DETERMINISTICALLY:
+    -- the engine's pipeline (registerController -> createInformation ->
+    -- InitialNpc -> entryNpcBaseInfo) only initializes records it creates
+    -- itself, so a pre-existing record makes spawnNPC skip its own init and
+    -- the record stays a zeroed corpse no body ever binds to. Field-verified
+    -- 2026-08-07 (drap_20260807_142324.log): two at-player respawns of Nick
+    -- Evans died on arrival with our attr=0 husk record, while
+    -- HostileSurvivorTrap -- same spawnNPC call, NO pre-created record --
+    -- spawns reliably on the same machine. spawnNPC into a cleared stype is
+    -- the correct state, exactly like the trap path.
     local removed = clear_records_for(stype)
+
     local ok = pcall(function()
         mgr:call("spawnNPC(app.solid.SurvivorDefine.SurvivorType, "
             .. "via.vec3, via.Quaternion, "
@@ -554,6 +645,20 @@ local function restore_member(stype, scoop_name, verdict)
     return spawn_at(stype, entry, scoop_name, false, verdict, true, true)
 end
 
+-- A record on its own is not a survivor. Now that we call createInformation
+-- ourselves the NpcBaseInfo shows up instantly, so "not dead" no longer means
+-- the body arrived -- only an Owner GameObject does. Promoting a bodiless
+-- record to JOIN would put an invisible follower in the party and report
+-- success, which is worse than the failure it replaced.
+local function record_has_body(info)
+    local owner
+    pcall(function() owner = info:get_field("Owner") end)
+    if not owner then return false end
+    local go
+    pcall(function() go = owner:call("get_GameObject") end)
+    return go ~= nil
+end
+
 local function finish_pending_spawns()
     if not next(spawn_pending) then return end
     local mgr = npc_mgr:get()
@@ -561,35 +666,99 @@ local function finish_pending_spawns()
     for stype, st in pairs(spawn_pending) do
         local elapsed = os.clock() - st.started
         if elapsed > 30.0 then
-            M.log(string.format("repair %s: BaseInfo never appeared (30s)",
-                st.entry.name or stype))
+            -- spawnNPC being accepted only means the call was taken. Whatever
+            -- went wrong, the engine is left holding a half-built record that
+            -- turns up as a corpse the next time it is looked at, and leaving
+            -- it costs the player that survivor's Rescue check for good.
+            --
+            -- Say which of the three failures it was: they need different
+            -- fixes, and the old message called all of them "BaseInfo never
+            -- appeared", which sent this bug down the wrong path once already.
+            local info, dead
+            pcall(function() info = mgr:call("searchInformation", stype) end)
+            if info then pcall(function() dead = info:call("isDead") end) end
+            local why
+            if not info then
+                why = "no record ever appeared"
+            elseif dead then
+                -- isDead is sticky: neither setVitalFull nor fullRecover
+                -- clears it, so this one can only be fixed by dropping the
+                -- record and building another.
+                why = "the record came back DEAD and stayed dead"
+            else
+                why = "the record is alive but never got a body"
+            end
+            local removed = clear_records_for(stype)
+            M.log.warn(string.format(
+                "repair %s (stype=%d) FAILED after 30s: %s -- cleared %d"
+                    .. " record(s)", st.entry.name or "?", stype, why, removed))
             spawn_pending[stype] = nil
         elseif elapsed >= 1.0 then
             local info
             pcall(function() info = mgr:call("searchInformation", stype) end)
-            if info then
-                local dead
-                pcall(function() dead = info:call("isDead") end)
+            local dead
+            if info then pcall(function() dead = info:call("isDead") end) end
+
+            if info and dead and elapsed >= DEAD_ON_ARRIVAL_SECONDS
+                    and not respawn_retried[stype] then
+                -- The record exists but came back dead, and isDead is sticky:
+                -- neither setVitalFull nor fullRecover clears it, so waiting
+                -- out the timeout only ever ends in a corpse. Drop it and
+                -- build another. Once -- a stype that cannot spawn must not
+                -- loop.
+                respawn_retried[stype] = true
+                -- Left in place deliberately: spawn_at overwrites this entry
+                -- on success, and clearing a key mid-pairs() only to re-add it
+                -- is undefined. If the retry fails to launch, the old entry
+                -- stays and the 30s timeout still reports it.
+                M.log(string.format(
+                    "repair %s (stype=%d): record came back dead after %.1fs"
+                        .. " -- dropping it and spawning again (one retry)",
+                    st.entry.name or "?", stype, elapsed))
+                spawn_at(stype, st.entry, st.scoop, false, "dead-on-arrival",
+                         st.join, st.at_player)
+            elseif info and record_has_body(info) then
                 if dead == false then
                     local label = st.entry.name or tostring(stype)
+                    -- The engine marks records born from a bare spawnNPC as
+                    -- IsOpeningNotSave, and the save writer excludes those
+                    -- records BY DESIGN -- npcnum and the entries agree, so
+                    -- the drop is clean and silent (field-verified
+                    -- 2026-08-07 via NpcSaveGuard: trap corpses carry the
+                    -- flag and vanish on every reload, no blanks). Left set,
+                    -- every successful repair evaporates at the next reload
+                    -- and the respawn loop starts over. Clear it so the
+                    -- repair can persist.
+                    local was_notsave = false
+                    pcall(function()
+                        was_notsave = info:get_field("IsOpeningNotSave") == true
+                        if was_notsave then
+                            info:set_field("IsOpeningNotSave", false)
+                        end
+                    end)
+                    if was_notsave then
+                        M.log(string.format(
+                            "repair %s: record was marked not-save -- cleared"
+                                .. " so it survives the next reload", label))
+                    end
+                    -- No mAreaNo overwrite in either branch: the engine's own
+                    -- spawn init just assigned the record's area, and stomping
+                    -- it with a harvested DB value can only ever agree or
+                    -- desync record-area from where the body stands -- the
+                    -- exact state that breaks area-load spawning and door
+                    -- transport. (Same trust-the-engine-init lesson as the
+                    -- createInformation removal above.)
                     if st.join then
                         -- Respawned into the party: place them, then wire the
                         -- escort. Spawning a grouped survivor alone can break
                         -- their normal path, which JOIN sidesteps.
                         if st.at_player then
                             move_to_player(info)
-                        else
-                            pcall(function()
-                                info:set_field("mAreaNo", st.entry.area)
-                            end)
                         end
                         promote_to_join(info, "repair " .. label)
                         M.log(string.format("repair %s: alive and joined (%.1fs)",
                             label, elapsed))
                     else
-                        pcall(function()
-                            info:set_field("mAreaNo", st.entry.area)
-                        end)
                         pcall(function()
                             info:call("setLiveState", st.entry.state or 1)
                         end)
@@ -597,6 +766,7 @@ local function finish_pending_spawns()
                             label, elapsed, st.entry.state or 1))
                     end
                     spawn_pending[stype] = nil
+                    respawn_retried[stype] = nil
                 end
             end
         end
@@ -797,6 +967,13 @@ local function tick_party_restore()
         -- Refusals are logged loudly: this is the branch that protects an
         -- unrecoverable mistake, so it must be visible when it fires.
         M.log("party restore DECLINED -- " .. reason)
+    else
+        -- NONE goes to the file too. Field lesson 2026-08-08: RazgrizEast's
+        -- sessions evaluated NONE at 40+ reloads with 16-member snapshots on
+        -- record, and the silence was indistinguishable from the tick never
+        -- running -- the reason string ("no snapshot recorded" = signals
+        -- empty vs "snapshot has no party members") is the diagnosis.
+        M.log.debug("party restore: none -- " .. reason)
     end
 end
 
@@ -871,7 +1048,15 @@ end
 -- way. Exists so a broken spawn can be reproduced deliberately: without it,
 -- removing a record to see whether the engine recreates it just triggers our
 -- own repair and hides the answer.
-local repair_enabled = true
+--
+-- DEFAULT OFF as of 2026-08-07: every respawn/restore path is disabled for
+-- the diagnostic build. The recovery system was masking the primordial
+-- record corruption behind respawns (and had defects of its own -- see
+-- handoff §10.4c-e); a despawn must now surface RAW, with the census,
+-- party snapshots and NpcSaveGuard boundary censuses recording it, so the
+-- field logs convict the writer instead of documenting our repair attempt.
+-- drap_recover_enabled(true) re-enables for a session.
+local repair_enabled = false
 
 function M.set_repair_enabled(enabled)
     repair_enabled = enabled ~= false
@@ -990,10 +1175,22 @@ local function ap_activated()
     return ok and on == true
 end
 
+local recovery_state_logged = false
+
 function M.on_frame()
     if not M:should_run() then return end
     if not scoop_sanity_on() then return end
     install_save_hooks()
+    -- One-shot: a field log must positively state whether recovery could
+    -- have spawned anything, or a quiet log is ambiguous evidence.
+    if not recovery_state_logged then
+        recovery_state_logged = true
+        M.log(repair_enabled
+            and "survivor respawn/restore paths ENABLED"
+            or ("survivor respawn/restore paths DISABLED (diagnostic build)"
+                .. " -- census and party snapshots still observing;"
+                .. " drap_recover_enabled(true) re-enables"))
+    end
     if not Shared.is_in_game() then
         last_area = nil
         entry_check = nil

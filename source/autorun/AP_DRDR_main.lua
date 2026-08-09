@@ -426,7 +426,17 @@ local function run_slot_connect(slot_data)
         and slot_data.survivor_respawn == false)
     AP.SurvivorRespawnEnabled = survivor_respawn_enabled
     AP.effects.SurvivorRecovery.set_survivor_respawn_enabled(survivor_respawn_enabled)
-    log("Survivor Respawn enabled=" .. tostring(survivor_respawn_enabled))
+    -- The option only does anything while the repair paths are live, and they
+    -- ship disabled. A bare "enabled=true" in a field log reads as "respawns
+    -- are happening" and would send the next investigation the wrong way.
+    local respawn_note = ""
+    if survivor_respawn_enabled
+        and AP.effects.SurvivorRecovery.is_repair_enabled
+        and not AP.effects.SurvivorRecovery.is_repair_enabled() then
+        respawn_note = " (inert -- survivor repair is disabled in this build)"
+    end
+    log("Survivor Respawn enabled=" .. tostring(survivor_respawn_enabled)
+        .. respawn_note)
 
     -- Goal mode for ScoopUnlocker -- used to fire flag 270 (Backup for Brad
     -- cutscene that opens EP shutters) on Meet-Jessie when goal is Savior.
