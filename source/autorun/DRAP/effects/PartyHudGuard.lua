@@ -16,6 +16,7 @@
 -- Console: drap_party_hud_guard_status() / _enabled(bool) / _show(n)
 
 local Shared = require("DRAP/Shared")
+local NpcSaveGuard = require("DRAP/effects/NpcSaveGuard")
 
 local M = Shared.create_module("PartyHudGuard")
 M:set_throttle(0.5)
@@ -125,6 +126,20 @@ local function install_hook()
     local ok = pcall(sdk.hook, m,
         function(args)
             if not (enabled and guard_active) then return end
+
+            -- mLiveState is serialized into the save, the save writer runs
+            -- on a NON-main thread, and the guard window and the transition
+            -- autosave are both triggered by the same area transition --
+            -- field logs show every transition write landing inside an
+            -- engaged window. A collision persists the flipped members as
+            -- FOUND and they drop from the party on reload. While a write is
+            -- in flight, skip the HUD call outright instead of mutating:
+            -- one unrendered widget tick versus a corrupted save.
+            if NpcSaveGuard.is_save_write_in_flight
+                and NpcSaveGuard.is_save_write_in_flight() then
+                skips_this_session = skips_this_session + 1
+                return sdk.PreHookResult.SKIP_ORIGINAL
+            end
 
             if show_n > 0 then
                 local ok_hide = false
