@@ -820,6 +820,7 @@ def set_rules(world) -> None:
     # --------------------------------------------------------------------
     # Psychopaths
     world.set_rule(world.multiworld.get_location("Watch the convicts kill that poor guy", world.player), And(CanReachRegion("Leisure Park"), (Has("The Convicts") if world.options.scoop_sanity else True_())))
+    world.set_rule(world.multiworld.get_location("Kill the convicts", world.player), CanReachLocation("Watch the convicts kill that poor guy"))
 
     world.set_rule(world.multiworld.get_location("Meet Cletus", world.player), And(CanReachRegion("North Plaza"), (Has("Cletus") if world.options.scoop_sanity else True_())))
     world.set_rule(world.multiworld.get_location("Kill Cletus", world.player), CanReachLocation("Meet Cletus"))

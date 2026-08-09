@@ -65,6 +65,12 @@ local function try_respawn()
     -- 445 off means they are already out there.
     if flag_get(FLAG_DAY1) ~= true then return false end
 
+    -- Both flags below are how the Kill the convicts check is spotted, so
+    -- give the tracker its turn before either is wiped.
+    if AP and AP.EventTracker and AP.EventTracker.poll_event_flags then
+        pcall(AP.EventTracker.poll_event_flags)
+    end
+
     if not flag_off(FLAG_DAY1) then
         M.log.warn("could not clear SET_PRISONER_1DAY -- staying banked")
         return false

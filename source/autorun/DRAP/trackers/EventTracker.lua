@@ -2,6 +2,7 @@
 -- Tracks:
 --   - app.solid.gamemastering.GameManager.mEventNo
 --   - app.solid.SolidLogManager.SuccessSCQList
+--   - event flags, for the handful of checks with no event of their own
 
 local Shared = require("DRAP/Shared")
 
@@ -14,6 +15,7 @@ M:set_throttle(0.5)  -- CHECK_INTERVAL
 
 local gm_mgr  = M:add_singleton("gm", "app.solid.gamemastering.GameManager")
 local slm_mgr = M:add_singleton("slm", "app.solid.SolidLogManager")
+local efm_mgr = M:add_singleton("efm", "app.solid.gamemastering.EventFlagsManager")
 
 ------------------------------------------------------------
 -- Configuration
@@ -107,10 +109,27 @@ local TRACKED_SCQ_IDS = {
     --["0xCA"] = "Find Greg's secret passage",
 }
 
+-- Read as levels, not edges: the flag is in the save, so a check missed while
+-- disconnected or mid-unlock is picked up again on the next session. Several
+-- flags may name the same location; the first one seen sends it.
+local TRACKED_EVENT_FLAGS = {
+    -- The convicts die to gunfire with no cutscene, so there is no event
+    -- number to watch. SET_PRISONER_1/2/3DAY mark that day's encounter as
+    -- spent and read off while they are still alive, so any of the three
+    -- coming on means they are down -- 2DAY and 3DAY only ever fire without
+    -- ScoopSanity, where the clock still moves. EV_PRISONER_DIE is the
+    -- generic death mark and covers the rest.
+    [445]  = 'Kill the convicts',
+    [446]  = 'Kill the convicts',
+    [447]  = 'Kill the convicts',
+    [1299] = 'Kill the convicts',
+}
+
 -- Expose for external use
 M.EVENT_ID_TO_NAME = EVENT_ID_TO_NAME
 M.TRACKED_EVENT_IDS = TRACKED_EVENT_IDS
 M.TRACKED_SCQ_IDS = TRACKED_SCQ_IDS
+M.TRACKED_EVENT_FLAGS = TRACKED_EVENT_FLAGS
 
 ------------------------------------------------------------
 -- Public State
@@ -228,6 +247,25 @@ local function handle_scq_updates()
 end
 
 ------------------------------------------------------------
+-- Event Flag Tracking
+------------------------------------------------------------
+
+--- Public so anything about to clear a tracked flag can send the check first.
+function M.poll_event_flags()
+    local efm = efm_mgr:get()
+    if not efm then return end
+
+    for id, desc in pairs(TRACKED_EVENT_FLAGS) do
+        if not SENT_DESCRIPTIONS[desc] then
+            local ok, on = pcall(function() return efm:call("evFlagCheck", id) end)
+            if ok and on == true then
+                maybe_fire_location(desc, "EventFlag", id, nil)
+            end
+        end
+    end
+end
+
+------------------------------------------------------------
 -- Per-frame Update
 ------------------------------------------------------------
 
@@ -283,6 +321,8 @@ function M.on_frame()
 
     -- Track SCQ Success list
     handle_scq_updates()
+
+    M.poll_event_flags()
 end
 
 return M

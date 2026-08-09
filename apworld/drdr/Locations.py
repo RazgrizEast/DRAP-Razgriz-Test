@@ -259,6 +259,10 @@ location_tables = {
         DRLocationData("Photograph PP Sticker 89", "Well Done Steak", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 98", "Wine", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 99", "Well Done Steak", DRLocationCategory.PP_STICKER),
+
+        # Appended rather than filed with the other convict entry above, since
+        # ids come from list position.
+        DRLocationData("Kill the convicts", "Milk", DRLocationCategory.PSYCHO_SCOOP),
     ],
 
     "Wonderland Plaza": [
