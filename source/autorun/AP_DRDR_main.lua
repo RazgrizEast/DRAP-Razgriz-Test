@@ -127,6 +127,7 @@ AP.effects.BookSkills                 = require("DRAP/effects/BookSkills")
 AP.effects.BookGuards                 = require("DRAP/effects/BookGuards")
 AP.effects.NpcInfoSweeper             = require("DRAP/effects/NpcInfoSweeper")
 AP.effects.NpcSaveGuard               = require("DRAP/effects/NpcSaveGuard")
+AP.TrapBank                           = require("DRAP/TrapBank")
 AP.effects.SurvivorRecovery           = require("DRAP/effects/SurvivorRecovery")
 AP.effects.PartyHudGuard              = require("DRAP/effects/PartyHudGuard")
 AP.effects.PlayerStats                = require("DRAP/effects/PlayerStats")
@@ -323,6 +324,8 @@ local function run_slot_connect(slot_data)
     -- is what initializes the ledger this reads its section from. Without it a
     -- survivor killed in an earlier session looks like a broken spawn.
     AP.effects.SurvivorRecovery.load_census()
+    -- Trap payout tallies, same ledger, same moment.
+    AP.TrapBank.load()
 
     -- Set up sticker save file
     if AP.PPStickerTracker.set_save_filename then
@@ -674,6 +677,7 @@ re.on_frame(function()
     safe_on_frame(AP.effects.BookGuards, "BookGuards")
     safe_on_frame(AP.effects.NpcInfoSweeper, "NpcInfoSweeper")
     safe_on_frame(AP.effects.NpcSaveGuard, "NpcSaveGuard")
+    safe_on_frame(AP.TrapBank, "TrapBank")
     safe_on_frame(AP.effects.SurvivorRecovery, "SurvivorRecovery")
     safe_on_frame(AP.effects.PartyHudGuard, "PartyHudGuard")
 

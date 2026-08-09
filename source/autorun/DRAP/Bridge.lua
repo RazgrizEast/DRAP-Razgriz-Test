@@ -871,6 +871,14 @@ function M.has_item_name(name)
     return (RECEIVED_ITEMS_BY_NAME[name] or 0) > 0
 end
 
+-- How many copies of an item have arrived. The map already counts them; only
+-- the boolean was exposed. Effects that must act once PER COPY need the count,
+-- and deriving from it survives a reconnect replaying every item -- an
+-- incremented tally would not.
+function M.count_item_name(name)
+    return RECEIVED_ITEMS_BY_NAME[name] or 0
+end
+
 function M.get_all_received_items()
     return RECEIVED_ITEMS
 end

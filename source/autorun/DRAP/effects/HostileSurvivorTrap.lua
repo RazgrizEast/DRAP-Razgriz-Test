@@ -85,12 +85,6 @@ do
     validate(SPECIAL_FORCES_TRAP_POOL, "SPECIAL_FORCES_TRAP_POOL")
 end
 
--- Defer/retry interval for queued traps.
-local DEFER_INTERVAL_S = 5.0
-
--- Drop queued traps that have been waiting longer than this.
-local DEFER_TIMEOUT_S = 600.0   -- 10 minutes
-
 -- Each trap fires random[min,max] NPCs (capped by available stypes).
 -- Driven by YAML via M.set_spawn_count_range.
 local spawn_count_min = 1
@@ -101,11 +95,7 @@ local spawn_count_max = 3
 ------------------------------------------------------------
 
 -- Per-trap-type pending queues. See docs § "Per-trap-type pending queue".
-local pending = {
-    hostile        = { count = 0, first_at = nil },
-    special_forces = { count = 0, first_at = nil },
-}
-local last_check_time = 0
+-- No local queue any more: TrapBank owns what is owed and persists it.
 
 ------------------------------------------------------------
 -- Helpers
@@ -372,51 +362,14 @@ local function fire_spawn(stype, live_state, hp_mult)
 end
 
 ------------------------------------------------------------
--- Per-frame deferred-firing loop
+-- Per-frame upkeep
 ------------------------------------------------------------
 
--- Per-pool deferred-firing helper. Drains one queued trap, or drops the
--- whole queue once it's been waiting longer than DEFER_TIMEOUT_S.
-local function process_pending(pool, label, state)
-    if state.count <= 0 then return end
-    local now = os.clock()
-
-    if state.first_at and (now - state.first_at) > DEFER_TIMEOUT_S then
-        log(string.format("Dropping %d queued %s -- exceeded %ds timeout",
-            state.count, label, DEFER_TIMEOUT_S))
-        state.count = 0
-        state.first_at = nil
-        return
-    end
-
-    local ok = can_fire_now()
-    if not ok then return end   -- still gated, keep waiting
-
-    local count = math.random(spawn_count_min, spawn_count_max)
-    local targets = pick_trap_targets_from(pool, count)
-    if #targets == 0 then return end   -- no safe targets, keep waiting
-
-    log(string.format("Deferred %s firing %d hostile(s)", label, #targets))
-    _notify_trap(label,
-        string.format("%d hostile attacker%s spawned!",
-            #targets, #targets == 1 and "" or "s"))
-    lock_trap_area()
-    for _, stype in ipairs(targets) do fire_spawn(stype) end
-    state.count = state.count - 1
-    if state.count <= 0 then state.first_at = nil end
-end
-
--- Deferred-firing loop registered at module load. Registering re.on_frame
--- from within another on_frame disrupts REFramework's iteration.
+-- Area-lock upkeep only. Draining what is owed belongs to TrapBank, which
+-- persists it -- this loop used to also expire the in-memory queue after ten
+-- minutes, which is exactly the silent loss that replaced.
 re.on_frame(function()
     update_trap_area_lock()
-    if pending.hostile.count <= 0 and pending.special_forces.count <= 0 then return end
-    local now = os.clock()
-    if now - last_check_time < DEFER_INTERVAL_S then return end
-    last_check_time = now
-
-    process_pending(TRAP_POOL,                "Hostile NPC Trap",    pending.hostile)
-    process_pending(SPECIAL_FORCES_TRAP_POOL, "Special Forces Trap", pending.special_forces)
 end)
 
 ------------------------------------------------------------
@@ -425,45 +378,58 @@ end)
 
 -- Generic trap-fire path: fires immediately, or queues on `state` if
 -- conditions block.
-local function fire_trap_impl(pool, label, state)
+--- One attempt. Returns false to decline WITHOUT being paid for -- TrapBank
+--- keeps the debt and retries. Nothing is queued here any more: the bank owns
+--- what is owed, and it persists, where the old in-memory queue was dropped
+--- after ten minutes and lost outright on quit.
+-- Last decline reason per trap, so a held trap says so ONCE. TrapBank retries
+-- every few seconds, and the area lock can be held for a whole area -- logging
+-- each attempt would fill a session log with the same line. The old queue got
+-- this for free by only logging when a trap was first queued.
+local last_decline = {}
+
+local function fire_trap_impl(pool, label)
     local ok, reason = can_fire_now()
     if not ok then
-        state.count = state.count + 1
-        state.first_at = state.first_at or os.clock()
-        log(string.format("%s deferred (%s) -- queued (count=%d)",
-            label, tostring(reason), state.count))
-        return
+        reason = tostring(reason)
+        if last_decline[label] ~= reason then
+            last_decline[label] = reason
+            log(string.format("%s held (%s) -- staying banked", label, reason))
+        end
+        return false
     end
 
     local count = math.random(spawn_count_min, spawn_count_max)
     local targets = pick_trap_targets_from(pool, count)
     if #targets == 0 then
-        -- All pool stypes already alive -- defer until at least one frees up
-        state.count = state.count + 1
-        state.first_at = state.first_at or os.clock()
-        log(string.format("%s: pool stypes all alive -- queued for retry", label))
-        return
+        if last_decline[label] ~= "pool alive" then
+            last_decline[label] = "pool alive"
+            log(string.format("%s: pool stypes all alive -- staying banked", label))
+        end
+        return false
     end
 
     log(string.format("%s firing %d hostile(s)", label, #targets))
     _notify_trap(label,
         string.format("%d hostile attacker%s spawned!",
             #targets, #targets == 1 and "" or "s"))
+    last_decline[label] = nil
     lock_trap_area()
     for _, stype in ipairs(targets) do
         fire_spawn(stype)
     end
+    return true
 end
 
 -- Fire a Hostile NPC Trap (random[min,max] cutscene NPCs in RAGE).
 function M.fire_trap()
-    fire_trap_impl(TRAP_POOL, "Hostile NPC Trap", pending.hostile)
+    return fire_trap_impl(TRAP_POOL, "Hostile NPC Trap")
 end
 
 -- Fire a Special Forces Trap (single Special Force NPC in RAGE; the pool
 -- is single-stype so count effectively caps at 1).
 function M.fire_special_forces_trap()
-    fire_trap_impl(SPECIAL_FORCES_TRAP_POOL, "Special Forces Trap", pending.special_forces)
+    return fire_trap_impl(SPECIAL_FORCES_TRAP_POOL, "Special Forces Trap")
 end
 
 -- Configure the spawn-count range (driven from YAML via AP slot data).
@@ -483,28 +449,41 @@ end
 
 -- Diagnostics / config
 function M.get_pending_count()
-    return pending.hostile.count + pending.special_forces.count
+    local TrapBank = require("DRAP/TrapBank")
+    return TrapBank.banked("Hostile NPC Trap")
+         + TrapBank.banked("Special Forces Trap")
 end
 
+-- Only releases the per-area lock now. What is owed lives in the ledger and is
+-- deliberately not clearable from here -- losing it is the bug this replaced.
 function M.clear_pending()
-    pending.hostile.count           = 0
-    pending.hostile.first_at         = nil
-    pending.special_forces.count    = 0
-    pending.special_forces.first_at  = nil
-    trap_area_lock                   = nil
-    log("Cleared pending trap queue")
+    trap_area_lock = nil
+    log("Released the trap area lock (banked traps are unaffected)")
 end
 
 function M.register()
     -- on_replay = "skip" -- don't re-spawn on save reload.
     local ItemEffects = require("DRAP/ItemEffects")
+    -- Banked, not fired on arrival: can_fire_now() refuses in a sanctuary,
+    -- pre-Jessie, or with the area lock held, and a trap that arrived then
+    -- used to sit in RAM and expire. fire_* return false to decline an
+    -- attempt without being paid for, so the debt survives until it lands.
+    local TrapBank = require("DRAP/TrapBank")
+    TrapBank.register("Hostile NPC Trap",    { fire = M.fire_trap })
+    TrapBank.register("Special Forces Trap", { fire = M.fire_special_forces_trap })
     ItemEffects.register("Hostile NPC Trap", {
         on_replay = "skip",
-        apply = function(ctx) M.fire_trap() end,
+        apply = function(ctx)
+            log(string.format("Hostile NPC Trap banked (%d owed)",
+                TrapBank.banked("Hostile NPC Trap")))
+        end,
     })
     ItemEffects.register("Special Forces Trap", {
         on_replay = "skip",
-        apply = function(ctx) M.fire_special_forces_trap() end,
+        apply = function(ctx)
+            log(string.format("Special Forces Trap banked (%d owed)",
+                TrapBank.banked("Special Forces Trap")))
+        end,
     })
 
     local hostile_n, sf_n = 0, 0

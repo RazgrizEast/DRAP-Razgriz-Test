@@ -493,13 +493,41 @@ function M.register()
         { name = "Slow Trap",          fn = M.slow_trap },
         { name = "Damage Player Trap", fn = M.player_damage },
     }
+    -- Traps go through TrapBank instead of firing on arrival: one that lands
+    -- at the title screen or mid-load used to be lost outright. Banked ones
+    -- are paid out one at a time once the player is actually in the game.
+    -- Buffs keep firing immediately -- they are a gift, and holding one back
+    -- to drip-feed it later would just be annoying.
+    local TrapBank = require("DRAP/TrapBank")
+    local TRAPS = {
+        ["Stomach Ache Trap"]  = true,
+        ["Zombait Trap"]       = true,
+        ["Slow Trap"]          = true,
+        ["Damage Player Trap"] = true,
+    }
+    local trap_n = 0
     for _, item in ipairs(items) do
-        ItemEffects.register(item.name, {
-            on_replay = "skip",
-            apply = function(ctx) item.fn() end,
-        })
+        if TRAPS[item.name] then
+            trap_n = trap_n + 1
+            TrapBank.register(item.name, { fire = function() item.fn() end })
+            -- Registered with ItemEffects too, purely so the arrival is
+            -- logged where every other item's is. It does no work.
+            ItemEffects.register(item.name, {
+                on_replay = "skip",
+                apply = function(ctx)
+                    log(string.format("%s banked (%d owed)", item.name,
+                        TrapBank.banked(item.name)))
+                end,
+            })
+        else
+            ItemEffects.register(item.name, {
+                on_replay = "skip",
+                apply = function(ctx) item.fn() end,
+            })
+        end
     end
-    log(string.format("PlayerBuffs registered (%d items)", #items))
+    log(string.format("PlayerBuffs registered (%d items, %d via TrapBank)",
+        #items, trap_n))
 end
 
 _G.drap_god = function(on)
