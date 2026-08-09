@@ -405,6 +405,9 @@ _all_items = [DRItemData(row[0], row[1], row[2]) for row in [
     ("Damage Player Trap",  4073, DRItemCategory.TRAP),
     ("Hostile NPC Trap",    4074, DRItemCategory.TRAP),
     ("Special Forces Trap", 4075, DRItemCategory.TRAP),
+    # ScoopSanity only -- it waits on "The Convicts" scoop item, which only
+    # exists in that mode. BuildItemPool drops it otherwise.
+    ("Convicts Respawn Trap", 4076, DRItemCategory.TRAP),
     # Note: Night Mode + Hardcore Zombies are NOT items — they are YAML
     # options (`night_mode_enabled`, `hardcore_zombies_enabled` in Options.py)
     # applied at slot-connect by DRAP/effects/ZombieEffects.lua.
@@ -550,6 +553,11 @@ def BuildItemPool(multiworld, count, options, excluded_scoop_names=(),
     # Trap subset of fillers — gated by options.trap_percentage on a per-roll
     # basis when filling remaining slots.
     trapList = [item for item in _all_items if item.category == DRItemCategory.TRAP]
+    # The convicts only fail to come back when the clock is frozen, and the
+    # trap keys off a scoop item that does not exist outside ScoopSanity.
+    if not options.scoop_sanity:
+        trapList = [item for item in trapList
+                    if item.name != "Convicts Respawn Trap"]
     nonTrapFiller = [item for item in itemList if item.category in (
         DRItemCategory.MISC, DRItemCategory.WEAPON, DRItemCategory.CONSUMABLE,
         DRItemCategory.BUFF
