@@ -128,6 +128,37 @@ local function current_area_graph()
     return SharedData.area_graph()
 end
 
+-- The prologue route. Before Meet Jessie the player MUST walk the Security
+-- Room <-> Entrance Plaza doorway for the opening cutscene, and no key for it
+-- can exist yet; after Jessie the key governs it like any other door. The game
+-- barricades the doorway itself in between, so nothing is lost by leaving it
+-- open until then.
+--
+-- This replaced an event-name test that also treated EVENT_NONE -- i.e. no
+-- event running, the normal state -- as a reason to unlock, which left the
+-- door open from the Security Room side for most of a run. Reported twice as
+-- "the Security Room to Entrance Plaza door works without its split key", and
+-- only in that direction, because the old test also required being in s136.
+local function is_prologue_doorway(origin_code, destination_code)
+    origin_code = SCENE_ALIASES[origin_code] or origin_code
+    destination_code = SCENE_ALIASES[destination_code] or destination_code
+    return (origin_code == "s136" and destination_code == "s100")
+        or (origin_code == "s100" and destination_code == "s136")
+end
+
+-- Cached because the flag is unreadable inside the load window, and guessing
+-- either way there is bad: guess "met" and the prologue door locks with no key
+-- in existence; guess "not met" and the key is bypassable. Starts true (a run
+-- begins before Jessie) and only ever moves on a successful read.
+local before_jessie = true
+
+local function refresh_jessie_state()
+    local SU = AP and AP.ScoopUnlocker
+    if not (SU and SU.has_met_jessie) then return end
+    local met = SU.has_met_jessie()
+    if met ~= nil then before_jessie = (met == false) end
+end
+
 -- Whether one door should be shut, given the layout's vanilla target and its
 -- HIT_DATA. Kept apart from the scan so it can be tested without standing up
 -- the whole reflection walk.
@@ -137,27 +168,18 @@ end
 -- walk through for the opening cutscene. The game barricades that doorway
 -- itself until Jessie, so the mod has no business locking it -- and the door
 -- is still that doorway however the shuffle rerouted it.
-function M.should_disable_door(level_path, origin_code, jump_name, hit_data, bypass_s100)
+function M.should_disable_door(level_path, origin_code, jump_name, hit_data, pre_jessie)
     if jump_name == nil or jump_name == "" then return false end
-    if jump_name == "s100" and bypass_s100 then return false end
+    -- Keyed on the doorway's own identity, not where it now leads: under Door
+    -- Locks the shuffle moves the destination, and the prologue still has to
+    -- be walkable.
+    if pre_jessie and is_prologue_doorway(origin_code, jump_name) then
+        return false
+    end
     return door_is_locked(origin_code,
                           effective_destination(level_path, jump_name, hit_data))
 end
 
-local function current_event_blocks_s100_lock()
-    local ev = ""
-    if AP and AP.EventTracker and AP.EventTracker.CURRENT_EVENT_NAME then
-        ev = tostring(AP.EventTracker.CURRENT_EVENT_NAME)
-    end
-
-    if M.CurrentLevelPath == "SCN_s136" then
-        if string.find(ev, "EVENT01", 1, true) then return true, ev end
-        if string.find(ev, "EVENT04", 1, true) then return true, ev end
-        if string.find(ev, "EVENT06", 1, true) then return true, ev end
-        if string.find(ev, "EVENT_NONE", 1, true) then return true, ev end
-    end
-    return false, ev
-end
 
 local function get_area_info()
     local am = am_mgr:get()
@@ -225,7 +247,7 @@ local function rescan_current_area_doors()
     local area_index, level_path = get_area_info()
     M.CurrentLevelPath = level_path
     M.CurrentAreaIndex = area_index
-    local bypass_s100, ev = current_event_blocks_s100_lock()
+    refresh_jessie_state()
 
     -- Which side of the door the player is standing on ("SCN_s200" -> "s200")
     local origin_code = level_path and (tostring(level_path):gsub("^SCN_", "")) or nil
@@ -268,7 +290,7 @@ local function rescan_current_area_doors()
 
                                 if mHitData_val and jump_name ~= "" then
                                     if M.should_disable_door(level_path, origin_code,
-                                                             jump_name, mHitData_val, bypass_s100) then
+                                                             jump_name, mHitData_val, before_jessie) then
                                         disable_hitdata(li, mHitData_val)
                                     else
                                         enable_hitdata(li, mHitData_val)

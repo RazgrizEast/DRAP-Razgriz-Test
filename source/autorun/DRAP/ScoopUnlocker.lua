@@ -1870,6 +1870,13 @@ function M.is_scoop_sanity_enabled()
     return scoop_sanity_enabled
 end
 
+--- Has the player talked to Jessie yet? Tri-state: true, false, or nil when
+--- the flag could not be read (common inside the load window). Callers must
+--- not treat nil as either answer -- DoorSceneLock keeps its last good read.
+function M.has_met_jessie()
+    return raw_check_flag(JESSIE_FLAG)
+end
+
 -- Any Order: the chain stops auto-advancing and the player starts main
 -- scoops from the GUI instead. State owns the rules; this just forwards.
 function M.set_split_keys_enabled(enabled)
