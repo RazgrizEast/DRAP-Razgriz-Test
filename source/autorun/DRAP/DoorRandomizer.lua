@@ -550,6 +550,29 @@ function M.get_redirects()
     return DOOR_REDIRECTS
 end
 
+--- Where a door really leads, for callers holding a layout's HIT_DATA.
+--- Reads mDoorNo off the hit data rather than guessing from the player's
+--- position, so the two North Plaza <-> Wonderland doorways resolve apart.
+--- Returns the vanilla name when the door has no redirect, so the result can
+--- be used unconditionally. Second return is the door id, for logging.
+function M.resolve_destination(level_path, vanilla_jump_name, hit_data_obj)
+    if not (level_path and vanilla_jump_name) then return vanilla_jump_name, nil end
+
+    local door_no = 0
+    if hit_data_obj and discover_hit_data_fields() then
+        local v = read_hit_data_field(hit_data_obj, "mDoorNo")
+        if v then door_no = v end
+    end
+
+    local door_id = tostring(level_path) .. "|" .. tostring(vanilla_jump_name)
+                    .. "|door" .. tostring(door_no)
+    local redirect = DOOR_REDIRECTS[door_id]
+    if redirect and redirect.target_area then
+        return tostring(redirect.target_area), door_id
+    end
+    return vanilla_jump_name, door_id
+end
+
 --- Returns whether the hook is installed
 function M.is_hook_installed()
     return hook_installed

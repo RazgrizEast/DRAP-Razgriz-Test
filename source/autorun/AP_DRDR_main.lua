@@ -366,6 +366,16 @@ local function run_slot_connect(slot_data)
         AP.DoorRandomizer.clear_redirects()
     end
 
+    -- Door Locks. Has to come after the redirects land, or the first rescan
+    -- would judge every door by its vanilla destination.
+    local door_locks_enabled = (type(slot_data) == "table" and slot_data.door_locks == true)
+    AP.DoorLocksEnabled = door_locks_enabled
+    if AP.DoorSceneLock then
+        AP.DoorSceneLock.set_door_locks_enabled(door_locks_enabled,
+            type(slot_data) == "table" and slot_data.area_graph or nil)
+    end
+    log("Door Locks enabled=" .. tostring(door_locks_enabled))
+
     -- Split Keys option. Door randomization grants every split key up front,
     -- so the locks still go on and simply open as those keys arrive.
     local split_keys_enabled = (type(slot_data) == "table" and slot_data.split_keys == true)

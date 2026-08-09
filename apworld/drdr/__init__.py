@@ -30,6 +30,7 @@ NON_DOOR_ENTRANCES = {
         "Greg's secret passage, open once Out of Control is done",
 }
 from .shared_data import (
+    AREA_GRAPH,
     AREA_KEY_NAMES, SPLIT_KEY_NAMES, TIME_KEY_NAMES,
     AP_TRIGGER_LOCATIONS, expand_trigger_location_names,
     SCOOPS, COMPLETION_FLAGS, SCOOP_COMPLETION_MAP, SCOOP_EVENTS,
@@ -661,6 +662,35 @@ class DRWorld(World):
         Rules.set_rules(self)
 
 
+    def _door_locks_area_graph(self) -> Dict[str, List[str]]:
+        """{scene_code: [scene_code, ...]} of where the doors actually lead.
+
+        The runtime reachability search walks the vanilla graph from shared
+        data, which is harmless while nothing is locked but wrong as soon as a
+        key matters. Built from the same redirects as the region graph so the
+        mod and the logic agree on what the player can get to.
+        """
+        graph = {code: set(targets) for code, targets in AREA_GRAPH.items()}
+
+        # Drop every vanilla door edge first -- a door the shuffle moved must
+        # not leave its old edge behind, and a two-pass walk keeps a redirect
+        # that lands back on a vanilla pair from erasing itself.
+        for door in EMBEDDED_DOOR_DATA.values():
+            src, dst = door.get("from_area_code"), door.get("to_area_code")
+            for a, b in ((src, dst), (dst, src)):
+                if a in graph:
+                    graph[a].discard(b)
+
+        for door_id, door in EMBEDDED_DOOR_DATA.items():
+            src = door.get("from_area_code")
+            redirect = self.door_redirects.get(door_id)
+            dst = (redirect or {}).get("target_area") or door.get("to_area_code")
+            if src and dst and src != dst:
+                graph.setdefault(src, set()).add(dst)
+                graph.setdefault(dst, set()).add(src)
+
+        return {code: sorted(targets) for code, targets in sorted(graph.items()) if targets}
+
     def _build_door_overlay_data(self) -> Dict[str, Dict[str, str]]:
         """{scene_code: {vanilla_dest_name: actual_dest_name}} for the Lua
         DoorPromptOverlay. Source ids are 'SCN_<scene>|<vanilla_target>|door<n>';
@@ -824,6 +854,12 @@ class DRWorld(World):
             "door_randomizer": door_randomizer_enabled,
             "door_randomizer_mode": door_randomizer_mode,  # For Lua: 0 = chaos, 1 = paired
             "door_redirects": self.door_redirects if door_randomizer_enabled else {},
+            "door_locks": self.door_locks_active,
+            # Where the doors actually lead. Only sent under Door Locks, where
+            # the vanilla graph in shared data would answer the wrong question.
+            "area_graph": (
+                self._door_locks_area_graph() if self.door_locks_active else {}
+            ),
             # Per-scene {vanilla_dest: actual_dest} for the Lua door-prompt
             # overlay. Empty when door_randomizer is off.
             "door_overlay_data": (

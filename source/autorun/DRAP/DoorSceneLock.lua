@@ -55,6 +55,17 @@ local LOCKED_SPLIT = {}
 local split_keys_enabled = false
 
 ------------------------------------------------------------
+-- Door Locks State
+------------------------------------------------------------
+
+-- Door Locks keeps the area keys in play with the doors shuffled, so a door
+-- has to be judged by where it now leads rather than by its vanilla target.
+-- The graph the AP world sends matches its own logic; without the option the
+-- vanilla graph from shared data still applies.
+local door_locks_enabled = false
+local shuffled_area_graph = nil
+
+------------------------------------------------------------
 -- Public State
 ------------------------------------------------------------
 
@@ -98,6 +109,39 @@ local function door_is_locked(origin_code, destination_code)
         return from ~= nil and from[destination_code] == true
     end
     return LOCKED_SCENES[destination_code] == true
+end
+
+-- Where this door leads right now. Only Door Locks needs the answer: with the
+-- option off every area key is precollected, so the vanilla target and the
+-- real one are both unlocked and asking would change nothing.
+local function effective_destination(level_path, jump_name, hit_data)
+    if not door_locks_enabled then return jump_name end
+    local DR = AP and AP.DoorRandomizer
+    if not (DR and DR.resolve_destination) then return jump_name end
+    return DR.resolve_destination(level_path, jump_name, hit_data) or jump_name
+end
+
+local function current_area_graph()
+    if shuffled_area_graph and next(shuffled_area_graph) then
+        return shuffled_area_graph
+    end
+    return SharedData.area_graph()
+end
+
+-- Whether one door should be shut, given the layout's vanilla target and its
+-- HIT_DATA. Kept apart from the scan so it can be tested without standing up
+-- the whole reflection walk.
+--
+-- The prologue exception keys on the vanilla target, not on where the door now
+-- leads: it identifies the Security Room's mall door, which the player has to
+-- walk through for the opening cutscene. The game barricades that doorway
+-- itself until Jessie, so the mod has no business locking it -- and the door
+-- is still that doorway however the shuffle rerouted it.
+function M.should_disable_door(level_path, origin_code, jump_name, hit_data, bypass_s100)
+    if jump_name == nil or jump_name == "" then return false end
+    if jump_name == "s100" and bypass_s100 then return false end
+    return door_is_locked(origin_code,
+                          effective_destination(level_path, jump_name, hit_data))
 end
 
 local function current_event_blocks_s100_lock()
@@ -223,11 +267,8 @@ local function rescan_current_area_doors()
                                 end
 
                                 if mHitData_val and jump_name ~= "" then
-                                    local locked = door_is_locked(origin_code, jump_name)
-
-                                    if locked and jump_name == "s100" and bypass_s100 then
-                                        enable_hitdata(li, mHitData_val)
-                                    elseif locked then
+                                    if M.should_disable_door(level_path, origin_code,
+                                                             jump_name, mHitData_val, bypass_s100) then
                                         disable_hitdata(li, mHitData_val)
                                     else
                                         enable_hitdata(li, mHitData_val)
@@ -316,6 +357,38 @@ function M.get_split_keys_enabled()
 end
 
 ------------------------------------------------------------
+-- Door Locks
+------------------------------------------------------------
+
+-- graph is the AP world's {scene_code = {scene_code, ...}} of where the doors
+-- actually lead. Passing nil falls back to the vanilla graph in shared data.
+function M.set_door_locks_enabled(enabled, graph)
+    door_locks_enabled = enabled == true
+    shuffled_area_graph = (door_locks_enabled and type(graph) == "table") and graph or nil
+
+    if door_locks_enabled then
+        local edges = 0
+        for _, targets in pairs(shuffled_area_graph or {}) do edges = edges + #targets end
+        if edges > 0 then
+            M.log(string.format("Door Locks enabled, %d edges in the shuffled graph", edges))
+        else
+            -- Without the graph the search would answer for the vanilla mall
+            -- while the player walks a shuffled one, which reads as scoops
+            -- refusing to start for no visible reason.
+            M.log("Door Locks enabled but no area graph was sent -- reachability"
+                .. " will follow the vanilla layout and may be wrong")
+        end
+    end
+
+    pending_rescan = true
+    rescan_current_area_doors()
+end
+
+function M.get_door_locks_enabled()
+    return door_locks_enabled
+end
+
+------------------------------------------------------------
 -- Reachability
 ------------------------------------------------------------
 
@@ -323,17 +396,17 @@ end
 -- whatever doors are open. Recomputed per call -- the answer changes every
 -- time a key arrives, and the graph is 17 nodes.
 --
--- This is the only question that survives all three modes. Area keys lock by
--- destination scene, Split Keys by transition, and door randomization locks
--- nothing at all (every key is precollected), so a search over the live lock
--- state answers all of them without a key list per mode.
+-- This is the only question that survives every mode. Area keys lock by
+-- destination scene, Split Keys by transition, and plain door randomization
+-- locks nothing at all (every key is precollected), so a search over the live
+-- lock state answers all of them without a key list per mode.
 --
--- Under door randomization the edges are the vanilla ones while the game has
--- rerouted them. That does not matter here: nothing is locked, so the search
--- reports everything reachable, which is what the randomizer guarantees.
+-- The edges are the vanilla ones except under Door Locks, which sends the
+-- shuffled graph. Plain door randomization can keep walking the vanilla graph:
+-- nothing is locked, so the search reports everything reachable either way.
 function M.reachable_areas(start_code)
     start_code = tostring(start_code or "s136")
-    local graph = SharedData.area_graph()
+    local graph = current_area_graph()
     local seen = { [start_code] = true }
     local queue, head = { start_code }, 1
     while head <= #queue do
@@ -355,7 +428,7 @@ function M.can_reach_area(area_code, start_code)
     -- it every area reads as unreachable -- which would defer every scoop
     -- forever and look exactly like a hang. Answer yes when we cannot answer
     -- at all; the rules still gate the checks either way.
-    if not next(SharedData.area_graph()) then
+    if not next(current_area_graph()) then
         if not _warned_no_graph then
             _warned_no_graph = true
             M.log("area_graph missing from shared data -- scoop reachability"
