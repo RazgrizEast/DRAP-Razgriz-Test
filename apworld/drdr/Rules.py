@@ -388,7 +388,6 @@ def set_rules(world) -> None:
             if _zone != "Entrance Plaza" or world.options.scoop_sanity:
                 world.set_rule(world.multiworld.get_entrance(f"Maintenance Tunnel -> {_zone}", world.player),
                               And(Has("Maintenance Tunnel Key"), Has(f"{_zone} Key")))
-        world.set_rule(world.multiworld.get_entrance("Maintenance Tunnel -> Leisure Park", world.player), And(Has("Maintenance Tunnel Key"), Has("Leisure Park Key")))
 
         if world.options.split_keys:
             world.set_rule(world.multiworld.get_entrance("Maintenance Tunnel -> Paradise Plaza", world.player), Has("Maintenance Tunnel - Paradise Plaza Key"))
