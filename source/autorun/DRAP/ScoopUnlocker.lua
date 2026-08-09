@@ -301,6 +301,7 @@ local on_completion_detected_callback = nil
 -- enabling flag 270 and CASCADE_FLAGS clearing it logs every frame.
 local _last_cascade_signature = nil
 local _logged_completion_events = {}   -- event_name -> true
+local _logged_suppressions = {}        -- event_name -> true (see the hook)
 local scoop_sanity_enabled = false
 local cult_limited_enabled = false
 local door_randomizer_enabled = false
@@ -1121,7 +1122,23 @@ local function install_hooks()
             function(args)
                 local flag_id = sdk.to_int64(args[3]) & 0xFFFFFFFF
 
-                if currently_unlocking then return args end
+                if currently_unlocking then
+                    -- Our own unlock writes flags, so the hook stands down to
+                    -- avoid reacting to itself. A real completion landing in
+                    -- that window is discarded outright, and the engine will
+                    -- not raise the flag again -- so say so, or the check just
+                    -- goes missing and looks like the game was slow.
+                    local dropped = COMPLETION_FLAGS[flag_id]
+                    if dropped and not completed_scoops[dropped.scoop]
+                            and not _logged_suppressions[dropped.event] then
+                        _logged_suppressions[dropped.event] = true
+                        M.log(string.format(
+                            "COMPLETION flag %d -> '%s' arrived while unlocking"
+                                .. " another scoop -- NOT counted",
+                            flag_id, dropped.event))
+                    end
+                    return args
+                end
 
                 if FLAG_BLACKLIST[flag_id] then
                     if verbose_logging then
@@ -1144,7 +1161,13 @@ local function install_hooks()
                                   and SCOOP_DATA[completion.scoop].category == "Main"
                                   and not received_scoops[completion.scoop]
                     if ss_block then
-                        if verbose_logging then
+                        -- Logged plainly, not just under verbose: this is the
+                        -- other way a completion goes quiet, and telling it
+                        -- apart from a slow game is impossible after the fact.
+                        -- Once per event, though -- the engine re-asserts the
+                        -- flag every frame and we clear it every frame back.
+                        if not _logged_suppressions[completion.event] then
+                            _logged_suppressions[completion.event] = true
                             M.log(string.format(
                                 "ScoopSanity guard: flag %d -> '%s' suppressed ('%s' not yet received as AP item)",
                                 flag_id, completion.event, completion.scoop))
@@ -1692,6 +1715,7 @@ function M.reset_for_new_game()
     -- Reset log-spam dedup state so a fresh run logs anew.
     _last_cascade_signature = nil
     _logged_completion_events = {}
+    _logged_suppressions = {}
 
     State.reset_for_new_game()
 end

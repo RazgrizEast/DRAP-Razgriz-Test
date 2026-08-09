@@ -348,6 +348,45 @@ local function install_hooks()
         end)
     end
 
+    -- Count the NpcBaseInfo list either side of a save. A trace that shows
+    -- blanks appearing between a write and the next read pins the corruption
+    -- to the save round-trip; one that shows them already present on the write
+    -- pins it to whatever ran earlier in that session. Without this the reader
+    -- is left inferring it from which stypes happen to get logged.
+    local function emit_npc_census(when)
+        local mgr = sdk.get_managed_singleton("app.solid.gamemastering.NpcManager")
+        if not mgr then return end
+        local total, blank, dead = 0, 0, 0
+        pcall(function()
+            local list = mgr:get_field("NpcInfoList")
+            if not list then return end
+            local n = list:call("get_Count") or 0
+            for i = 0, n - 1 do
+                local info = list:call("get_Item", i)
+                if info then
+                    total = total + 1
+                    local td = info:get_type_definition()
+                    local nf = td and td:get_field("<Name>k__BackingField")
+                    local sf = td and td:get_field("mLiveState")
+                    local af = td and td:get_field("mAreaNo")
+                    local stype = nf and tonumber(tostring(nf:get_data(info))) or -1
+                    local state = sf and tonumber(tostring(sf:get_data(info))) or -1
+                    local area  = af and tonumber(tostring(af:get_data(info))) or -1
+                    local is_dead = false
+                    pcall(function() is_dead = info:call("isDead") == true end)
+                    if is_dead then dead = dead + 1 end
+                    -- Burt is stype 0, so an allocated-but-unfilled record
+                    -- decodes as him. Zero on every field is the real tell.
+                    if stype == 0 and state == 0 and area == 0 and is_dead then
+                        blank = blank + 1
+                    end
+                end
+            end
+        end)
+        emit({ ev = "npc_census", when = when, total = total,
+               blank = blank, dead = dead })
+    end
+
     -- SCQManager lifecycle -- Phase 0 verification targets for the rework.
     local scq_td = sdk.find_type_definition(SCQ_TYPE)
     if scq_td then
@@ -357,9 +396,11 @@ local function install_hooks()
         end)
         hook_method(scq_td, "notfiyDataRead(app.solid.SolidStorage)", function(args)
             emit({ ev = "save_read" })
+            emit_npc_census("after_read")
         end)
         hook_method(scq_td, "notfiyDataWrite(app.solid.SolidStorage)", function(args)
             emit({ ev = "save_write" })
+            emit_npc_census("before_write")
         end)
         hook_method(scq_td, "callRadio", function(args)
             emit({ ev = "radio_call" })
