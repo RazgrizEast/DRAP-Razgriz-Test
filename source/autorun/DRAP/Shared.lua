@@ -173,12 +173,32 @@ Shared.SCENE_INFO = {
     s600 = { name = "Maintenance Tunnel",    index = 1536 },
     s401 = { name = "Carlito's Hideout",     index = 1025 },
     s601 = { name = "Meat Processing Area",  index = 1537 },
+
+    -- The Overtime Cave, in the order it is played. No door anywhere leads
+    -- here -- it is entered from Isabela's departure cutscene -- so these
+    -- never appear in the area graph and are not lockable. Named so area
+    -- readouts say where the player is instead of printing a raw index.
+    --
+    -- Indices read in game with drap_player_pos(), not derived: the code looks
+    -- like hex and here it happens to be, but s135 is 287 rather than 309, so
+    -- the pattern cannot be trusted.
+    --
+    -- sb01 and sb02 are joined by a load zone rather than a door, so no
+    -- areaJump fires between them and the door capture never sees it.
+    -- The tank fight and Brock are both sb03; sb04 has never been entered and
+    -- has no index or confirmed contents.
+    sb00 = { name = "Cave - Entrance",       index = 2816 },
+    sb01 = { name = "Cave - Middle",         index = 2817 },
+    sb02 = { name = "Cave - Exit",           index = 2818 },
+    sb03 = { name = "Cave - Battleground",   index = 2819 },
+    sb04 = { name = "Cave - Unvisited"       },
 }
 
 --- Reverse map: engine area index → scene code. Built once at module load.
 Shared.INDEX_TO_SCENE = {}
 for code, info in pairs(Shared.SCENE_INFO) do
-    Shared.INDEX_TO_SCENE[info.index] = code
+    -- Skips entries whose index is not known yet, rather than mapping nil.
+    if info.index then Shared.INDEX_TO_SCENE[info.index] = code end
 end
 
 ------------------------------------------------------------

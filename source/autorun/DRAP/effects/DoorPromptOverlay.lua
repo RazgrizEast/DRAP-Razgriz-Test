@@ -472,7 +472,14 @@ end
 -- REFramework console, and the printed (x, y, z) is the player position to
 -- associate with that specific door. Used when assembling the hardcoded
 -- per-door overrides for the s300<->s400 (Wonderland<->North) pairs.
-_G.drap_player_pos = function()
+--- The capture used to map the Maintenance Tunnel doorways: stand in a spot,
+--- run it, and the printed position is what to associate with that door.
+---
+--- Also prints the raw area index, which SCENE_INFO needs and nothing else
+--- reports. The index is not derivable from the scene code -- most look like
+--- hex but s135 is 287, not 309 -- so for any area we have not catalogued it
+--- has to be read here.
+function M.capture_position()
     local pm = sdk.get_managed_singleton("app.solid.PlayerManager")
     local x, y, z = nil, nil, nil
     if pm then
@@ -491,12 +498,21 @@ _G.drap_player_pos = function()
                         or "<no door panel active>"
 
     if x == nil then
-        log("drap_player_pos: PlayerManager.CurrentPlayerCondition.LastPlayerPos unavailable")
+        log("capture_position: PlayerManager.CurrentPlayerCondition.LastPlayerPos unavailable")
         return
     end
 
-    log(string.format("scene=%s pos=(%.3f, %.3f, %.3f) door=%s",
-        scene, x, y, z, active_door))
+    local area_index
+    local am = sdk.get_managed_singleton("app.solid.gamemastering.AreaManager")
+    if am then
+        area_index = safe(function() return am:get_field("mAreaIndex") end)
+    end
+
+    log(string.format("scene=%s index=%s pos=(%.3f, %.3f, %.3f) door=%s",
+        scene, tostring(area_index), x, y, z, active_door))
+    return x, y, z, scene, area_index
 end
+
+_G.drap_player_pos = function() return M.capture_position() end
 
 return M

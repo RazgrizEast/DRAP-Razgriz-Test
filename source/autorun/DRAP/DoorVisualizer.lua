@@ -1341,10 +1341,83 @@ end
 local last_generate_status = nil  -- nil, "success", or error message
 local last_generate_time = 0
 
+-- Warp picker state. Index into the area list, then into that area's doors.
+local warp_area_idx = 1
+local warp_door_idx = 1
+local warp_status = nil
+local warp_status_time = 0
+
+--- Every door in the game, choosable by the area it is in and which door it
+--- is. Debug only, and deliberately above the Door Randomizer check: warping
+--- is for testing a vanilla or unconnected run as much as a randomized one.
+local function draw_warp_picker(DoorRandomizer)
+    if not imgui.tree_node("Warp to a Door") then return end
+
+    local areas, targets = DoorRandomizer.get_warp_targets()
+    if not areas or #areas == 0 then
+        imgui.text_colored("No door table loaded (drdr_doors.json missing).",
+            0xFFFF8800)
+        imgui.tree_pop()
+        return
+    end
+
+    if warp_area_idx > #areas then warp_area_idx = 1 end
+
+    local area_labels = {}
+    for i, code in ipairs(areas) do
+        area_labels[i] = string.format("%s (%s)",
+            DoorRandomizer.area_display_name(code), code)
+    end
+
+    local changed, picked = imgui.combo("Area", warp_area_idx, area_labels)
+    if changed then
+        warp_area_idx = picked
+        warp_door_idx = 1
+    end
+
+    local list = targets[areas[warp_area_idx]] or {}
+    if #list == 0 then
+        imgui.text("No doors recorded in this area.")
+        imgui.tree_pop()
+        return
+    end
+    if warp_door_idx > #list then warp_door_idx = 1 end
+
+    local door_labels = {}
+    for i, t in ipairs(list) do door_labels[i] = t.label end
+    local dchanged, dpicked = imgui.combo("Door", warp_door_idx, door_labels)
+    if dchanged then warp_door_idx = dpicked end
+
+    local target = list[warp_door_idx]
+    if target and target.pos then
+        imgui.text(string.format("Lands at (%.2f, %.2f, %.2f) in %s",
+            target.pos.x or 0, target.pos.y or 0, target.pos.z or 0,
+            tostring(target.to)))
+    end
+
+    if imgui.button("Warp Here") and target then
+        local ok = DoorRandomizer.warp_to(target.to, target.pos, target.angle,
+                                          target.label)
+        warp_status = ok and ("Warped to " .. target.label)
+                        or "Warp failed -- see the log"
+        warp_status_time = os.clock()
+    end
+
+    if warp_status and os.clock() - warp_status_time < 5 then
+        imgui.text_colored(warp_status,
+            warp_status:find("failed") and 0xFFFF0000 or 0xFF00FF00)
+    end
+
+    imgui.tree_pop()
+end
+
 function M.draw_tab_content(debug)
     local DoorRandomizer = require("DRAP/DoorRandomizer")
 
     if debug then
+        draw_warp_picker(DoorRandomizer)
+        imgui.spacing()
+
         imgui.text_colored(
             DoorRandomizer.is_enabled() and "Door Rando: ON" or "Door Rando: OFF",
             DoorRandomizer.is_enabled() and 0xFF00FF00 or 0xFFFF0000)
