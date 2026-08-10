@@ -84,6 +84,10 @@ SCOOPS: List[Dict[str, Any]] = _DATA.get("scoops", [])
 # Kept here so the event strings can be validated against Locations.py.
 COMPLETION_FLAGS: List[Dict[str, Any]] = _DATA.get("completion_flags", [])
 
+# The nine Overtime suppressant objects, read from the game's own
+# EventSetCookingEquipment.CookInfos.
+OVERTIME_ITEMS: List[Dict[str, Any]] = _DATA.get("overtime_items", [])
+
 if SCHEMA_VERSION >= 2 and not SCOOPS:
     raise ValueError(
         "drdr_shared.json declares schema_version >= 2 but has no 'scoops' "

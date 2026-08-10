@@ -22,6 +22,14 @@ local ss_mgr = M:add_singleton("ss", "app.solid.SolidStorage")
 ------------------------------------------------------------
 
 local CHALLENGES = {
+    -- Queens handed to Isabela in Overtime. The fifth is Honey Hunt, which the
+    -- game flags itself, so this stops at four rather than doubling up.
+    queenBeeCount = {
+        label   = "Queens given to Isabela",
+        targets = { 1, 2, 3, 4 },
+        location_ids = { "Give Isabela 1 Queen", "Give Isabela 2 Queens",
+                         "Give Isabela 3 Queens", "Give Isabela 4 Queens" },
+    },
     PlayerLevel = {
         label   = "Reach Level",
         targets = { 10, 20, 30, 40, 50 },

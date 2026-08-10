@@ -332,6 +332,26 @@ class SurvivorRespawn(DefaultOnToggle):
     display_name = "Survivor Respawn"
 
 
+class OvertimeProgressionGating(Toggle):
+    """
+    Adds gates to Overtime so Ending S is a longer run than Ending A rather
+    than the same run with a different ending.
+
+    With this off, Overtime plays as it always has. Its checks still exist --
+    the queens, the gates in the cave, the suppressant hand-ins and the rest --
+    they are simply not held back by anything.
+
+    With this on, three things are gated behind items the multiworld has to
+    send you. The eight suppressant ingredients cannot be picked up until their
+    item arrives, though walking up to one still sends its check. Isabela will
+    not leave for the cave without the Cave Key. The Humvee will not start
+    without the Humvee Key.
+
+    This option has no effect unless the goal is Ending S.
+    """
+    display_name = "Overtime Progression Gating"
+
+
 class NightModeEnabled(Toggle):
     """
     When enabled, zombies behave as if it is always night, regardless of
@@ -541,6 +561,7 @@ class DROption(PerGameCommonOptions):
     hostile_survivor_count_max: HostileSurvivorCountMax
     cult_limited: CultLimited
     survivor_respawn: SurvivorRespawn
+    overtime_progression_gating: OvertimeProgressionGating
     night_mode_enabled: NightModeEnabled
     hardcore_zombies_enabled: HardcoreZombiesEnabled
     random_starting_costume: RandomStartingCostume
@@ -562,6 +583,7 @@ dr_option_groups = [
             ExcludeLevels,
             ExcludeLevelsAbove,
             PPStickersFiller,
+            OvertimeProgressionGating,
         ],
     ),
     OptionGroup(

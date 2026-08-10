@@ -410,6 +410,21 @@ _all_items = [DRItemData(row[0], row[1], row[2]) for row in [
     # ScoopSanity only -- it waits on "The Convicts" scoop item, which only
     # exists in that mode. BuildItemPool drops it otherwise.
     ("Convicts Respawn Trap", 4076, DRItemCategory.TRAP),
+
+    # Overtime suppressant ingredients. The mod holds the pickup until the
+    # matching item arrives, so all eight are needed to hand them in.
+    ("Blender", 5000, DRItemCategory.LOCK),
+    ("First Aid Kit", 5001, DRItemCategory.LOCK),
+    ("Coffee Filters", 5002, DRItemCategory.LOCK),
+    ("Magnifying Glass", 5003, DRItemCategory.LOCK),
+    ("Camp Stove", 5004, DRItemCategory.LOCK),
+    ("Developing Solution", 5005, DRItemCategory.LOCK),
+    ("Perfume Bottle", 5006, DRItemCategory.LOCK),
+    ("Cold Spray", 5007, DRItemCategory.LOCK),
+    # Isabela will not leave for the Cave without it.
+    ("Cave Key", 5008, DRItemCategory.LOCK),
+    # The Humvee will not start without it.
+    ("Humvee Key", 5009, DRItemCategory.LOCK),
     # Note: Night Mode + Hardcore Zombies are NOT items — they are YAML
     # options (`night_mode_enabled`, `hardcore_zombies_enabled` in Options.py)
     # applied at slot-connect by DRAP/effects/ZombieEffects.lua.
@@ -576,7 +591,28 @@ def BuildItemPool(multiworld, count, options, excluded_scoop_names=(),
 
     fillerList = nonTrapFiller + trapList
 
+    # Everything Overtime Progression Gating puts behind the multiworld. Their
+    # locations are Ending-S only, so the items have to be too, or the pool
+    # outgrows the locations -- and with the gating off nothing enforces them,
+    # so they would be items with nothing to open.
+    overtime_gating_on = bool(getattr(options, "overtime_progression_gating",
+                                      type("X", (), {"value": False})()).value)
+    overtime_item_names = {
+        "Blender",
+        "First Aid Kit",
+        "Coffee Filters",
+        "Magnifying Glass",
+        "Camp Stove",
+        "Developing Solution",
+        "Perfume Bottle",
+        "Cold Spray",
+        "Cave Key",
+        "Humvee Key",
+    }
+
     for lock in lockList:
+        if lock.name in overtime_item_names                 and (options.goal.value != 0 or not overtime_gating_on):
+            continue
         # Area keys are precollected under door randomization, and replaced by
         # the per-door keys under Split Keys
         if (options.door_randomizer or options.split_keys) and lock.name in area_key_names:

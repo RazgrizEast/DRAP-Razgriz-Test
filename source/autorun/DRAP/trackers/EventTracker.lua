@@ -63,8 +63,7 @@ local TRACKED_EVENT_IDS = {
     [44]  = 'Meet Larry',
     [49]  = 'Head back to the Security Room at the end of day 3',
     [53]  = 'Get bit!',
-    [131] = 'Gather the suppressants and generator and talk to Isabela',
-    [126] = 'Give Isabela 5 queens',
+    [126] = 'Honey Hunt',
     [136] = 'Get to the Humvee',
     [144] = 'Fight a tank and win',
     [134] = 'Ending S: Beat up Brock with your bare fists!',
@@ -123,6 +122,40 @@ local TRACKED_EVENT_FLAGS = {
     [446]  = 'Kill the convicts',
     [447]  = 'Kill the convicts',
     [1299] = 'Kill the convicts',
+
+    -- Inside the Cave, in the order they are opened: Isabela crawls through
+    -- the first gate, opens the second, and the lever raises the last.
+    -- Deliberately not 527 or 529 -- those pair with 528 and 530 but switch
+    -- off again moments later, and these are read as levels, so a momentary
+    -- flag would never be seen.
+    [528]  = 'Open Gate 1',
+    [530]  = 'Open Gate 2',
+    [1349] = 'Raise the final gate',
+
+    -- The suppressant hand-in. This used to be watched as event id 131, which
+    -- was never confirmed and is not this mission.
+    [135]  = 'Scramble for a Suppressant',
+
+    -- Moved off ScoopUnlocker's completion table, which only sees flags that
+    -- go through evFlagOn. Whatever the drone event uses does not: setting
+    -- 316 by hand fires the completion, walking the event never does.
+    [316]  = 'Frank sees a sick-ass RC Drone',
+
+    -- SET_FLOW680, the one marker the Generator sets whichever way it
+    -- was obtained. Its pickup flags only fire when taken off the floor,
+    -- never when the crashed-helicopter cutscene hands it over.
+    [442]  = 'Give Isabela the Generator',
+
+    -- SET_COOK_EQUIPMENT00-07. Isabela takes the ingredients one at a
+    -- time, and CookInfos says which flag belongs to which.
+    [454]  = 'Give Isabela the Blender',
+    [455]  = 'Give Isabela the First Aid Kit',
+    [456]  = 'Give Isabela the Coffee Filters',
+    [457]  = 'Give Isabela the Magnifying Glass',
+    [458]  = 'Give Isabela the Camp Stove',
+    [459]  = 'Give Isabela the Developing Solution',
+    [460]  = 'Give Isabela the Perfume Bottle',
+    [461]  = 'Give Isabela the Cold Spray',
 }
 
 -- Expose for external use

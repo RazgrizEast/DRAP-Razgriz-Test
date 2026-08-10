@@ -118,6 +118,14 @@ function M.completion_flags()
     return (data and data.completion_flags) or {}
 end
 
+--- The nine Overtime suppressant objects, straight from the game's own
+--- EventSetCookingEquipment.CookInfos: class_name is the scene object,
+--- get_flag is set when the player takes it, show_flag when it is delivered.
+function M.overtime_items()
+    ensure_loaded()
+    return (data and data.overtime_items) or {}
+end
+
 -- Main-case objective-pin indices (case -> scq_no/pos_tbl), the
 -- redirect-FROM set MissionTruth rewrites at getSCQPosData.
 function M.main_case_guides()

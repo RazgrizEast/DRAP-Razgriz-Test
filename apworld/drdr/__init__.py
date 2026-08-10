@@ -326,7 +326,7 @@ class DRWorld(World):
             "Maintenance Tunnel",
             "Meat Processing Area",
             "Carlito's Hideout",
-            "Tunnels",
+            "Cave",
             "Level Ups",
             "Challenges"
         ]})
@@ -452,8 +452,8 @@ class DRWorld(World):
         
         create_connection("Seon's Food and Stuff", "North Plaza")
 
-        create_connection("Carlito's Hideout", "Tunnels")
-        create_connection("Leisure Park", "Tunnels")
+        create_connection("Carlito's Hideout", "Cave")
+        create_connection("Leisure Park", "Cave")
 
         create_connection("Menu", "Level Ups")
         create_connection("Menu", "Challenges")
@@ -819,6 +819,8 @@ class DRWorld(World):
         split_keys_enabled = bool(self.options.split_keys.value)
         any_order_enabled = bool(self.options.main_scoops_any_order.value)
         survivor_respawn_enabled = bool(self.options.survivor_respawn.value)
+        overtime_gating_enabled = bool(
+            self.options.overtime_progression_gating.value)
         # Hardcore implies Night — auto-enable Night when Hardcore is on so
         # the Lua side can rely on the single flag without extra logic.
         night_mode_enabled = bool(self.options.night_mode_enabled.value)
@@ -894,6 +896,7 @@ class DRWorld(World):
                 "split_keys": split_keys_enabled,
                 "main_scoops_any_order": any_order_enabled,
                 "survivor_respawn": survivor_respawn_enabled,
+                "overtime_progression_gating": overtime_gating_enabled,
                 "night_mode_enabled": night_mode_enabled,
                 "hardcore_zombies_enabled": hardcore_zombies_enabled,
                 "random_starting_costume": random_starting_costume,
@@ -937,6 +940,7 @@ class DRWorld(World):
             "split_keys": split_keys_enabled,
             "main_scoops_any_order": any_order_enabled,
             "survivor_respawn": survivor_respawn_enabled,
+            "overtime_progression_gating": overtime_gating_enabled,
             "night_mode_enabled": night_mode_enabled,
             "hardcore_zombies_enabled": hardcore_zombies_enabled,
             "random_starting_costume": random_starting_costume,

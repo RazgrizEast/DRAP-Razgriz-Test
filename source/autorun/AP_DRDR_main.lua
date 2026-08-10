@@ -142,6 +142,7 @@ AP.effects.ZombieEffects              = require("DRAP/effects/ZombieEffects")
 AP.effects.CostumeRandomizer          = require("DRAP/effects/CostumeRandomizer")
 AP.effects.AP_LocationTriggers        = require("DRAP/effects/AP_LocationTriggers")
 AP.effects.DoorPromptOverlay          = require("DRAP/effects/DoorPromptOverlay")
+AP.effects.OvertimeItemGate           = require("DRAP/effects/OvertimeItemGate")
 
 AP.effects.AreaKeyEffects.register_all()
 AP.effects.SplitKeyEffects.register_all()
@@ -159,6 +160,7 @@ AP.effects.ZombieEffects.register()
 AP.effects.CostumeRandomizer.register()
 AP.effects.AP_LocationTriggers.register()
 AP.effects.DoorPromptOverlay.register()
+AP.effects.OvertimeItemGate.register()
 
 -- Per-scene fixups (e.g. disable s136 safe-room barricade once Jessie is met
 -- under ScoopSanity). Hooks AreaManager.onLoadMapEvent.
@@ -413,6 +415,19 @@ local function run_slot_connect(slot_data)
     AP.Goal = goal
     local goal_names = { [0] = "Ending S", [1] = "Ending A", [2] = "Savior" }
     log("Goal: " .. (goal_names[goal] or tostring(goal)))
+
+    -- Overtime suppressant gating. Ending S only, because that is the only
+    -- goal whose seed carries the eight items -- and every Ending S seed,
+    -- ScoopSanity or not, since the eight are what stops the run finishing
+    -- the moment Ending A does.
+    -- Gating is opt-in: with it off the module still sends the Overtime
+    -- checks, it just holds nothing back.
+    local overtime_gating = type(slot_data) == "table"
+        and slot_data.overtime_progression_gating == true
+    AP.OvertimeGatingEnabled = overtime_gating
+    if AP.effects.OvertimeItemGate then
+        AP.effects.OvertimeItemGate.set_enabled(goal == 0, false, overtime_gating)
+    end
 
     -- Number of survivors (only meaningful when goal == 2, Savior)
     AP.NumberOfSurvivors = (type(slot_data) == "table" and tonumber(slot_data.number_of_survivors)) or 35

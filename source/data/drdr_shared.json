@@ -4088,7 +4088,7 @@
     },
     {
       "flag": 131,
-      "event": "Reach the end of the tunnel with Isabela"
+      "event": "Proceed through the cave with Isabela"
     },
     {
       "flag": 270,
@@ -4139,10 +4139,6 @@
       "event": "Ending A: Solve all of the cases and be on the helipad at 12pm"
     },
     {
-      "flag": 316,
-      "event": "Frank sees a sick-ass RC Drone"
-    },
-    {
       "flag": 769,
       "event": "Meet Jessie in the Warehouse",
       "scoop": "Meet Jessie in the Warehouse"
@@ -4184,6 +4180,80 @@
     {
       "flag": 2356,
       "event": "Complete Memories"
+    }
+  ],
+  "overtime_items": [
+    {
+      "name": "Blender",
+      "region": "Food Court",
+      "class_name": "uOm222_1_1",
+      "show_flag": 454,
+      "get_flag": 2079,
+      "pickup_flags": [2079, 714, 2722, 2754]
+    },
+    {
+      "name": "First Aid Kit",
+      "region": "Seon's Food and Stuff",
+      "class_name": "uOm21c",
+      "show_flag": 455,
+      "get_flag": 2071,
+      "pickup_flags": [2071, 713, 2721, 2753]
+    },
+    {
+      "name": "Coffee Filters",
+      "region": "Security Room",
+      "class_name": "uOm223",
+      "show_flag": 456,
+      "get_flag": 2072,
+      "pickup_flags": [2072, 715, 2723, 2755]
+    },
+    {
+      "name": "Magnifying Glass",
+      "region": "Wonderland Plaza",
+      "class_name": "uOm224",
+      "show_flag": 457,
+      "get_flag": 2073,
+      "pickup_flags": [2073, 716, 2724, 2756]
+    },
+    {
+      "name": "Camp Stove",
+      "region": "Entrance Plaza",
+      "class_name": "uOm225",
+      "show_flag": 458,
+      "get_flag": 2074,
+      "pickup_flags": [2074, 717, 2725, 2757]
+    },
+    {
+      "name": "Developing Solution",
+      "region": "Paradise Plaza",
+      "class_name": "uOm226",
+      "show_flag": 459,
+      "get_flag": 2075,
+      "pickup_flags": [2075, 718, 2726, 2758]
+    },
+    {
+      "name": "Perfume Bottle",
+      "region": "Entrance Plaza",
+      "class_name": "uOm227_1",
+      "show_flag": 460,
+      "get_flag": 2076,
+      "pickup_flags": [2076, 719, 2727, 2759]
+    },
+    {
+      "name": "Cold Spray",
+      "region": "Paradise Plaza",
+      "class_name": "uOm228",
+      "show_flag": 461,
+      "get_flag": 2077,
+      "pickup_flags": [2077, 720, 2728, 2760]
+    },
+    {
+      "name": "Generator",
+      "region": "Leisure Park",
+      "class_name": "uOm230",
+      "show_flag": 431,
+      "get_flag": 2061,
+      "pickup_flags": [2061, 721]
     }
   ],
   "survivor_positions": {

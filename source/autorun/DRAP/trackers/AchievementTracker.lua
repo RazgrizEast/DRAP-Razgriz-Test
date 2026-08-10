@@ -28,6 +28,11 @@ local UNLOCK_SIG = "Unlock(app.solid.gamemastering.ChallengeManager.Challenge, "
 local ACHIEVEMENT_LOCATIONS = {
     WelcomeToHell   = "Welcome to Hell",
     PhotoJournalist = "Photojournalist",
+    -- Shooting down the Special Forces helicopter in Overtime. It has to come
+    -- through here: its CheckEventFlag is 129, the same flag "See the crashed
+    -- helicopter" uses, so watching the flag would fire both checks at once.
+    -- GoalValue 0 makes it a one-shot rather than a counter.
+    HellaCopter     = "Hella Copter - Shoot down the Special Forces Helicopter",
 }
 
 ------------------------------------------------------------
