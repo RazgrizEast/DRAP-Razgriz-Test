@@ -461,7 +461,11 @@ local function _install_hooks()
         sdk.hook(m_read,
             function() end,
             function(retval)
-                log("Save load detected -- reapplying DRAP state")
+                -- Below the guard, or a vanilla run claims to be reapplying
+                -- state it never touches.
+                if Activation.is_active() then
+                    log("Save load detected -- reapplying DRAP state")
+                end
                 M.apply()
                 return retval
             end)
