@@ -54,6 +54,8 @@ AP.EventFlagExplorer = require("DRAP/debug/EventFlagExplorer")
 -- FlagTraceRecorder self-registers its own re.on_frame (it must keep
 -- recording during cutscenes, where the isInGame-gated loop below stops).
 AP.FlagTraceRecorder = require("DRAP/debug/FlagTraceRecorder")
+-- Console-only: reads state the flag trace cannot see.
+AP.StateProbe = require("DRAP/debug/StateProbe")
 
 local Shared = require("DRAP/Shared")
 local SharedData = require("DRAP/SharedData")
