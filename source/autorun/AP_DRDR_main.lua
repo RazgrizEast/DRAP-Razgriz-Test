@@ -17,9 +17,11 @@ local Logger = require("DRAP/Logger")
 Logger.info("DRAP", string.format("DRAP %s starting -- session log: %s",
     Logger.VERSION, Logger.get_path() or "console only (file open failed)"))
 
+local Activation = require("DRAP/Activation")
 local AP_BRIDGE = require("DRAP/Bridge")
 
 AP = AP or {}
+AP.Activation       = Activation
 AP.AP_BRIDGE        = AP_BRIDGE
 AP.ItemSpawner      = require("DRAP/ItemSpawner")
 AP.ItemRestriction  = require("DRAP/ItemRestriction")
@@ -308,6 +310,10 @@ local function run_slot_connect(slot_data)
 
     log("Slot connected: slot=" .. slot .. " seed=" .. seed)
 
+    -- Before any of the restore below: the mod is dormant until here, and
+    -- everything that follows expects to be running for real.
+    Activation.activate("slot " .. slot)
+
     -- Bridge persistence FIRST: everything below may consult completed-check
     -- history (e.g. AP_LocationTriggers.setup() bootstraps its counted-entry
     -- counters from AP_BRIDGE.is_completed(); loading checks after setup() ran
@@ -582,6 +588,13 @@ local function on_enter_game()
     new_game_checked = false
 end
 
+-- Connecting while already in game skips the enter-game edge, so ask for the
+-- reapply directly or a mid-session connect restores nothing.
+Activation.on_activate(function()
+    pending_reapply = true
+    new_game_checked = false
+end)
+
 local function try_reapply_if_ready()
     if not pending_reapply then return end
     if not AP.ItemSpawner.inventory_system_running() then return end
@@ -656,6 +669,17 @@ re.on_frame(function()
     local ok_ig, now_in_game = pcall(AP.Scene.isInGame)
     if not ok_ig or not now_in_game then
         was_in_game = false
+        return
+    end
+
+    -- No slot connected: vanilla. Nothing touches the game and nothing
+    -- watches it, so a later connect cannot flush another save to the server.
+    if not Activation.is_active() then
+        -- The two exceptions: inert in a real vanilla run, and the only
+        -- thing protecting an AP save loaded offline. Leave them outside.
+        safe_on_frame(AP.effects.NpcSaveGuard, "NpcSaveGuard")
+        safe_on_frame(AP.effects.PartyHudGuard, "PartyHudGuard")
+        was_in_game = now_in_game
         return
     end
 

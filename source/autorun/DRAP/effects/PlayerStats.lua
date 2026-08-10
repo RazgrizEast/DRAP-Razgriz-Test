@@ -10,6 +10,7 @@ local M = {}
 
 local Shared = require("DRAP/Shared")
 local Ledger = require("DRAP/LocationLedger")
+local Activation = require("DRAP/Activation")
 local log = Shared.create_logger("PlayerStats")
 
 ------------------------------------------------------------
@@ -78,7 +79,10 @@ local stat_deltas = {
     run_level = 0, item_buff = 0, speed_mul = 0,
 }
 
-local progression_mode = "replace"   -- "vanilla_only" | "replace" | "extra_buffs_only"
+local progression_mode = "vanilla_only"  -- "vanilla_only" | "replace" | "extra_buffs_only"
+-- Vanilla until a slot connect says otherwise. "replace" writes baseline
+-- plus deltas, and with no items received that is Frank pinned to level 1
+-- -- health, stats and skills all clamped for someone playing unmodded.
 local save_filename = nil
 local hooks_installed = false
 
@@ -170,6 +174,9 @@ end
 
 -- Write canonical DRAP state into the engine. Idempotent -- call any time.
 function M.apply()
+    -- Both callers are sdk.hooks, which fire whether or not the frame loop
+    -- is gated, and load_save() can restore a mode from an earlier run.
+    if not Activation.is_active() then return end
     if progression_mode == "vanilla_only" then return end
 
     local psm = _psm()
@@ -499,6 +506,7 @@ local function _install_skill_watchdog()
     _watchdog_installed = true
     local last_check = 0
     re.on_frame(function()
+        if not Activation.is_active() then return end
         if progression_mode == "vanilla_only" then return end
         local now = os.clock()
         if now - last_check < 1.0 then return end

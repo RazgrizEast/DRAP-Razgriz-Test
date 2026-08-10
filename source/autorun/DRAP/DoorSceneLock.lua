@@ -3,6 +3,7 @@
 
 local Shared = require("DRAP/Shared")
 local SharedData = require("DRAP/SharedData")
+local Activation = require("DRAP/Activation")
 
 local M = Shared.create_module("DoorSceneLock")
 local testing_mode = false
@@ -82,6 +83,10 @@ local last_level_path = nil
 local pending_rescan = false
 local _warned_no_graph = false
 
+-- Connecting mid-session has to re-judge the doors it left alone while
+-- dormant. Declared after pending_rescan so the closure captures the local.
+Activation.on_activate(function() pending_rescan = true end)
+
 ------------------------------------------------------------
 -- Helpers
 ------------------------------------------------------------
@@ -103,6 +108,9 @@ local SCENE_ALIASES = {
 -- unlock a scene. The per-door state governs instead of the scene state.
 local function door_is_locked(origin_code, destination_code)
     if testing_mode then return false end
+    -- Every scene below starts locked and only an arriving key item opens
+    -- one, so with no slot connected these would never open at all.
+    if not Activation.is_active() then return false end
     destination_code = SCENE_ALIASES[destination_code] or destination_code
     if split_keys_enabled then
         local from = LOCKED_SPLIT[origin_code]

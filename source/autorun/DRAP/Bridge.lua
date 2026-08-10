@@ -5,6 +5,7 @@ local Shared = require("DRAP/Shared")
 local AP_REF = require("AP_REF/core")
 local ItemEffects = require("DRAP/ItemEffects")
 local Ledger = require("DRAP/LocationLedger")
+local Activation = require("DRAP/Activation")
 
 local M = Shared.create_module("Bridge")
 
@@ -260,6 +261,14 @@ do
 end
 
 function M.check(loc_name)
+    -- Dormant: this belongs to a save the slot has never seen, and
+    -- journaling it would flush the lot on the next connect. Gated here
+    -- rather than at each caller so no future tracker can miss it.
+    if not Activation.is_active() then
+        M.log("dropped '" .. tostring(loc_name) .. "' -- no slot connected")
+        return false
+    end
+
     M.log("Sending location check: " .. tostring(loc_name))
 
     -- Record every check for resend-on-reconnect, even if the send fails

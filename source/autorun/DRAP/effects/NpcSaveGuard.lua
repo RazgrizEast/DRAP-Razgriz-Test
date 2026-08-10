@@ -65,6 +65,7 @@
 --   drap_npc_save_guard_status() -- guard state + last boundary stats
 
 local Shared = require("DRAP/Shared")
+local Activation = require("DRAP/Activation")
 local SharedData = require("DRAP/SharedData")
 local Logger = require("DRAP/Logger")
 
@@ -736,7 +737,10 @@ function M.on_frame()
 
     -- One-shot, main thread: turn the rare corruption moment into the
     -- discriminating experiment while the pre-damage file still exists.
-    if damage_popup_pending and not damage_popup_shown then
+    -- The guard still runs with no slot connected, but this asks for DRAP
+    -- logs -- meaningless to someone who thinks they are playing vanilla.
+    if damage_popup_pending and not damage_popup_shown
+        and Activation.is_active() then
         damage_popup_pending = false
         damage_popup_shown = true
         pcall(re.msg,
