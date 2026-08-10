@@ -45,13 +45,12 @@ AREA_NAMES = {
     "s401": "Carlito's Hideout",
     "s600": "Maintenance Tunnel",
     "s500": "Seon's Food and Stuff",
-    "s601": "Butcher",
+    "s601": "Meat Processing Area",
 }
 
 PROTECTED_AREAS = {
     "s135",  # Heliport
     "s136",  # Security Room
-    "s601",  # Butcher
 }
 
 DEAD_END_AREAS = {
@@ -768,7 +767,7 @@ def generate_door_map_html(redirects: Dict[str, dict], title: str = "Door Random
         "s200": "Paradise", "s100": "Entrance", "s900": "Al Fresca", "sa00": "Food Court",
         "s300": "Wonderland", "s400": "North Plaza", "s700": "Leisure Pk", "s501": "Crislip's",
         "s503": "Colby's", "s401": "Carlito's Hideout", "s600": "Tunnels", "s500": "Grocery",
-        "s601": "Butcher",
+        "s601": "Meat Processing Area",
     }
 
     all_areas = set()

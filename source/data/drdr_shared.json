@@ -96,6 +96,12 @@
       "key_item": "Carlito's Hideout Key",
       "scene_code": "s401",
       "in_item_pool": true
+    },
+    {
+      "name": "Meat Processing Area",
+      "key_item": "Meat Processing Area Key",
+      "scene_code": "s601",
+      "in_item_pool": true
     }
   ],
   "split_areas": [
@@ -432,6 +438,20 @@
     {
       "origin": "s300",
       "destination": "s200"
+    }
+    ]
+    },
+    {
+  "name": "Maintenance Tunnel - Meat Processing Area",
+  "key_item": "Maintenance Tunnel - Meat Processing Area Key",
+  "transitions": [
+    {
+      "origin": "s600",
+      "destination": "s601"
+    },
+    {
+      "origin": "s601",
+      "destination": "s600"
     }
     ]
     }
@@ -3330,7 +3350,7 @@
     },
     {
       "name": "The Butcher",
-      "required_regions": ["Maintenance Tunnel"],
+      "required_regions": ["Meat Processing Area"],
       "category": "Main",
       "order": 15,
       "primary_flag": 302,

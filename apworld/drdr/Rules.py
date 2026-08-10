@@ -327,6 +327,8 @@ def set_rules(world) -> None:
                       _door("Food Court Key", "Food Court - Leisure Park Key"))
         world.set_rule(world.multiworld.get_entrance("Leisure Park -> North Plaza", world.player),
                       _door("North Plaza Key", "Leisure Park - North Plaza Key"))
+        world.set_rule(world.multiworld.get_entrance("Maintenance Tunnel -> Meat Processing Area", world.player),
+                      _door("Meat Processing Area Key", "Maintenance Tunnel - Meat Processing Area Key"))
         world.set_rule(world.multiworld.get_entrance("Leisure Park -> Maintenance Tunnel", world.player),
                       _door("Maintenance Tunnel Key", "Leisure Park - Maintenance Tunnel Key"))
         world.set_rule(world.multiworld.get_entrance("Leisure Park -> Paradise Plaza", world.player),
@@ -633,7 +635,7 @@ def set_rules(world) -> None:
 
         world.set_rule(world.multiworld.get_location("Complete Jessie's Discovery", world.player), CanReachLocation("Escort Isabela to Carlito's Hideout and have a chat"))
 
-        world.set_rule(world.multiworld.get_location("Meet Larry", world.player), CanReachLocation("Complete Jessie's Discovery"))
+        world.set_rule(world.multiworld.get_location("Meet Larry", world.player), And(CanReachLocation("Complete Jessie's Discovery"), CanReachRegion("Meat Processing Area")))
 
         world.set_rule(world.multiworld.get_location("Complete The Butcher", world.player), CanReachLocation("Meet Larry"))
 
@@ -1082,8 +1084,8 @@ def set_rules(world) -> None:
     world.set_rule(world.multiworld.get_location("Photograph PP Sticker 92", world.player), CanReachRegion("Maintenance Tunnel"))
     world.set_rule(world.multiworld.get_location("Photograph PP Sticker 93", world.player), CanReachRegion("Maintenance Tunnel"))
     world.set_rule(world.multiworld.get_location("Photograph PP Sticker 94", world.player), CanReachRegion("Maintenance Tunnel"))
-    world.set_rule(world.multiworld.get_location("Photograph PP Sticker 95", world.player), CanReachRegion("Maintenance Tunnel"))
-    world.set_rule(world.multiworld.get_location("Photograph PP Sticker 96", world.player), CanReachRegion("Maintenance Tunnel"))
+    world.set_rule(world.multiworld.get_location("Photograph PP Sticker 95", world.player), CanReachRegion("Meat Processing Area"))
+    world.set_rule(world.multiworld.get_location("Photograph PP Sticker 96", world.player), CanReachRegion("Meat Processing Area"))
 
     # PP Stickers in Security Room
     world.set_rule(world.multiworld.get_location("Photograph PP Sticker 97", world.player), CanReachRegion("Security Room"))

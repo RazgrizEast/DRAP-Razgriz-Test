@@ -266,6 +266,7 @@ _all_items = [DRItemData(row[0], row[1], row[2]) for row in [
     ("Rooftop Key", 1011, DRItemCategory.LOCK),
     ("Warehouse Key", 1012, DRItemCategory.LOCK),
     ("Wonderland Plaza Key", 1013, DRItemCategory.LOCK),
+    ("Meat Processing Area Key", 1038, DRItemCategory.LOCK),
 
     # Split keys
     ("Rooftop - Security Room Key", 1014, DRItemCategory.LOCK),
@@ -292,6 +293,7 @@ _all_items = [DRItemData(row[0], row[1], row[2]) for row in [
     ("Maintenance Tunnel - Wonderland Plaza Key", 1035, DRItemCategory.LOCK),
     ("Maintenance Tunnel - Seon's Food and Stuff Key", 1036, DRItemCategory.LOCK),
     ("Paradise Plaza - Wonderland Plaza Key", 1037, DRItemCategory.LOCK),
+    ("Maintenance Tunnel - Meat Processing Area Key", 1039, DRItemCategory.LOCK),
 
     
     # Special Items
@@ -506,7 +508,8 @@ def BuildItemPool(multiworld, count, options, excluded_scoop_names=(),
         "Colby's Movieland Key", "Leisure Park Key", "North Plaza Key",
         "Crislip's Home Saloon Key", "Food Court Key", "Wonderland Plaza Key",
         "Al Fresca Plaza Key", "Entrance Plaza Key", "Seon's Food and Stuff Key",
-        "Maintenance Tunnel Key", "Carlito's Hideout Key", "Maintenance Tunnel Access Key"
+        "Maintenance Tunnel Key", "Carlito's Hideout Key", "Maintenance Tunnel Access Key",
+        "Meat Processing Area Key"
     }
 
     # Keys in Split Keys mode, skipped otherwise
@@ -519,6 +522,7 @@ def BuildItemPool(multiworld, count, options, excluded_scoop_names=(),
         "Carlito's Hideout - North Plaza Key", "North Plaza - Seon's Food and Stuff Key", "Leisure Park - Maintenance Tunnel Key",
         "Maintenance Tunnel - Paradise Plaza Key", "Entrance Plaza - Maintenance Tunnel Key", "Food Court - Maintenance Tunnel Key",
         "Al Fresca Plaza - Maintenance Tunnel Key", "Maintenance Tunnel - Wonderland Plaza Key", "Maintenance Tunnel - Seon's Food and Stuff Key",
+        "Maintenance Tunnel - Meat Processing Area Key",
         "Paradise Plaza - Wonderland Plaza Key"
     }
     

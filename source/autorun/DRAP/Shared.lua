@@ -172,7 +172,7 @@ Shared.SCENE_INFO = {
     s500 = { name = "Seon's Food and Stuff", index = 1280 },
     s600 = { name = "Maintenance Tunnel",    index = 1536 },
     s401 = { name = "Carlito's Hideout",     index = 1025 },
-    s601 = { name = "Butcher",               index = 1537 },
+    s601 = { name = "Meat Processing Area",  index = 1537 },
 }
 
 --- Reverse map: engine area index → scene code. Built once at module load.

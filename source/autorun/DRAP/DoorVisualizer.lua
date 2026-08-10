@@ -87,7 +87,7 @@ local AREA_COLORS = {
     s300 = "#AA00FF",  -- Wonderland Plaza
     s230 = "#D500F9",  -- Warehouse
     s400 = "#FF4081",  -- North Plaza
-    s601 = "#8D6E63",  -- Butcher
+    s601 = "#8D6E63",  -- Meat Processing
     s600 = "#78909C",  -- Maintenance Tunnel
     s500 = "#FFFFFF",  -- Seon's Food and Stuff
     s501 = "#CE93D8",  -- Crislip's
@@ -100,7 +100,7 @@ local AREA_SHORT_NAMES = {
     s900 = "Al Fresca",     sa00 = "Food Court",    s300 = "Wonderland",
     s400 = "North Plaza",   s700 = "Leisure Pk",    s501 = "Crislip's",
     s503 = "Colby's",       s401 = "Carlito's",     s600 = "Tunnels",
-    s500 = "Seon's",        s601 = "Butcher",
+    s500 = "Seon's",        s601 = "Meat Processing",
 }
 
 -- Pixel positions on Mall.png for each door's source endpoint.

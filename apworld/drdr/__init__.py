@@ -324,6 +324,7 @@ class DRWorld(World):
             "Seon's Food and Stuff",
             "Crislip's Home Saloon",
             "Maintenance Tunnel",
+            "Meat Processing Area",
             "Carlito's Hideout",
             "Tunnels",
             "Level Ups",
@@ -417,6 +418,9 @@ class DRWorld(World):
             if _zone != "Entrance Plaza" or self.options.scoop_sanity:
                 create_connection("Maintenance Tunnel", _zone)
         create_connection("Maintenance Tunnel", "Leisure Park")
+        # The Meat Processing Area hangs off the tunnels and nothing else.
+        create_connection("Maintenance Tunnel", "Meat Processing Area")
+        create_connection("Meat Processing Area", "Maintenance Tunnel")
 
         create_connection("Al Fresca Plaza", "Entrance Plaza")
         create_connection("Al Fresca Plaza", "Food Court")

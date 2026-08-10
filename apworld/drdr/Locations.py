@@ -72,7 +72,8 @@ class DRLocation(Location):
             "Carlito's Hideout",
             "Tunnels",
             "Level Ups",
-            "Challenges"
+            "Challenges",
+            "Meat Processing Area"
         ]
 
         output = {}
@@ -412,8 +413,6 @@ location_tables = {
         # Events in Maintenance Tunnel
         DRLocationData("Complete Bomb Collector", "Milk", DRLocationCategory.MAIN_SCOOP),
         DRLocationData("Beat Drivin Carlito", "Milk", DRLocationCategory.MAIN_SCOOP),
-        DRLocationData("Meet Larry", "Milk", DRLocationCategory.MAIN_SCOOP),
-        DRLocationData("Complete The Butcher", "Milk", DRLocationCategory.MAIN_SCOOP),
 
         # PP Stickers in Maintenance Tunnel
         DRLocationData("Photograph PP Sticker 90", "Yogurt", DRLocationCategory.PP_STICKER),
@@ -421,6 +420,15 @@ location_tables = {
         DRLocationData("Photograph PP Sticker 92", "Pie", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 93", "Baguette", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 94", "Orange Juice", DRLocationCategory.PP_STICKER),
+    ],
+
+    # Off the Maintenance Tunnel and nothing else, so its key gates all four.
+    "Meat Processing Area": [
+        # Events in the Meat Processing Area
+        DRLocationData("Meet Larry", "Milk", DRLocationCategory.MAIN_SCOOP),
+        DRLocationData("Complete The Butcher", "Milk", DRLocationCategory.MAIN_SCOOP),
+
+        # PP Stickers in the Meat Processing Area
         DRLocationData("Photograph PP Sticker 95", "Uncooked Pizza", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 96", "Milk", DRLocationCategory.PP_STICKER),
     ],
