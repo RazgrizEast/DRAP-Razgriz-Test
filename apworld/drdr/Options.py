@@ -526,7 +526,7 @@ class SplitKeys(Toggle):
     Keys work in both directions. The 'Leisure Park - Paradise Plaza Key' opens the door from
     both Leisure Park into Paradise Plaza and from Paradise Plaza into Leisure Park.
 
-    Each key is named by alphabetically using full area names, such as
+    Each key is named alphabetically using full area names, such as
     "Crislip's Home Saloon - North Plaza Key", "Al Fresca Plaza - Food Court Key", etc.
 
     This makes the mall even more mazelike, increasing the difficulty. It also means
