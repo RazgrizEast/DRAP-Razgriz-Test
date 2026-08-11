@@ -1,4 +1,5 @@
 # world/drdr/__init__.py
+import re
 from typing import Any, Dict, Set, List
 
 from BaseClasses import MultiWorld, Region, Item, Entrance, Tutorial, ItemClassification
@@ -469,13 +470,19 @@ class DRWorld(World):
     # added at the end of location_tables["Security Room"] in Locations.py.
     SAVIOR_GOAL_LOCATION = "Savior: Rescue enough survivors to escape"
 
-    # All "Rescue X" location names. Used by the Savior goal's access rule to
-    # count reachable survivors. Built once at class load from Locations.py.
+    # All "Rescue <name>" location names. Used by the Savior goal's access
+    # rule and by the "Rescue N survivors" milestones to count reachable
+    # survivors. Built once at class load from Locations.py.
+    #
+    # The milestones are themselves named "Rescue N survivors", so they are
+    # excluded here -- otherwise each milestone would count itself and the
+    # Savior goal would count all ten of them as survivors.
     ALL_RESCUE_LOCATIONS = [
         loc.name
         for region_locs in location_tables.values()
         for loc in region_locs
         if loc.name.startswith("Rescue ")
+        and not re.fullmatch(r"Rescue \d+ survivors", loc.name)
     ]
 
     # EVENT-category goal locations that carry default_item="Victory". If they
@@ -804,6 +811,7 @@ class DRWorld(World):
         door_randomizer_mode = self.options.door_randomizer_mode.value
         scoop_sanity_enabled = bool(self.options.scoop_sanity.value)
         exclude_levels_enabled = bool(self.options.exclude_levels.value)
+        exclude_rescues_enabled = bool(self.options.exclude_rescues.value)
         pp_stickers_filler_enabled = bool(self.options.pp_stickers_filler.value)
 
         # Player-stats / progression options (PlayerStats + PlayerBuffs +
@@ -888,6 +896,8 @@ class DRWorld(World):
                 "scoop_sanity": scoop_sanity_enabled,
                 "exclude_levels": exclude_levels_enabled,
                 "exclude_levels_above": self.options.exclude_levels_above.value,
+                "exclude_rescues": exclude_rescues_enabled,
+                "exclude_rescues_above": self.options.exclude_rescues_above.value,
                 "enable_skill_items": enable_skill_items,
                 "enable_stat_items": enable_stat_items,
                 "enable_extra_stat_buffs": enable_extra_stat_buffs,
@@ -933,6 +943,7 @@ class DRWorld(World):
             ),
             "scoop_sanity": scoop_sanity_enabled,
             "exclude_levels": exclude_levels_enabled,
+            "exclude_rescues": exclude_rescues_enabled,
             "scoop_order": self.scoop_order if scoop_sanity_enabled else {},
             # Player-stats slot data (read by Lua on slot connect)
             "vanilla_progression": vanilla_progression_value,

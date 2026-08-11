@@ -197,6 +197,33 @@ class ExcludeLevelsAbove(Range):
     default = 30
 
 
+class ExcludeRescues(Toggle):
+    """
+    When enabled, high "Rescue N survivors" checks are prevented from having
+    progression items. The later ones need most of the mall rescued, so an
+    item behind one sits at the end of the run.
+    """
+    display_name = "Exclude Rescues"
+    default = True
+
+
+class ExcludeRescuesAbove(Range):
+    """
+    If 'Exclude Rescues' is enabled, any "Rescue N survivors" check above the
+    chosen value will still exist as a check but will be prevented from having
+    progression items. If 'Exclude Rescues' is disabled, this value can be
+    ignored.
+
+    The checks are every fifth survivor up to 45, plus 48 -- every survivor in
+    the mall. A value of 48 excludes nothing.
+    """
+
+    display_name = "Exclude Rescues Above"
+    range_start = 5
+    range_end = 48
+    default = 35
+
+
 class EnableSkillItems(DefaultOnToggle):
     """
     When enabled, Frank's 21 combat skills (Jump Kick, Suplex, etc.) become AP
@@ -554,6 +581,8 @@ class DROption(PerGameCommonOptions):
     main_scoops_any_order: MainScoopsAnyOrder
     exclude_levels: ExcludeLevels
     exclude_levels_above: ExcludeLevelsAbove
+    exclude_rescues: ExcludeRescues
+    exclude_rescues_above: ExcludeRescuesAbove
     enable_skill_items: EnableSkillItems
     enable_stat_items: EnableStatItems
     enable_extra_stat_buffs: EnableExtraStatBuffs
@@ -585,6 +614,8 @@ dr_option_groups = [
             PpBonusLocations,
             ExcludeLevels,
             ExcludeLevelsAbove,
+            ExcludeRescues,
+            ExcludeRescuesAbove,
             PPStickersFiller,
             OvertimeProgressionGating,
         ],
