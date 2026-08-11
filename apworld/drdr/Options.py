@@ -92,8 +92,9 @@ class Goal(Choice):
               Overtime scoops are removed from the pool, making for a shorter run.
 
     Savior:   Rescue a specified number of survivors to win (see
-              "Number of Survivors" below). Ending S / Ending A locations still
-              exist as normal checks but are filler-only and not the goal.
+              "Number of Survivors" below). In ScoopSanity, there will not be any
+              Main Scoop locations. If ScoopSanity is off, then Ending S / Ending A
+              locations still exist as normal but are filler-only and not the goal.
     """
     display_name = "Goal"
     option_ending_s = 0
@@ -317,15 +318,16 @@ class CultLimited(Toggle):
 class SurvivorRespawn(DefaultOnToggle):
     """
     A survivor's "Rescue" check can only be sent when they reach the Security
-    Room, so if a survivor dies that location can never be collected and
-    whatever item is behind it stays locked away for good.
+    Room, so if a survivor dies that location cannot be collected unless the player
+    restarts the run and rescues the survivor again.
 
     With this option enabled, a survivor who dies during a rescue reappears at
     the spot they originally spawned, so you can go back and pick them up
     again. They return already following you, because survivors who normally
     spawn as part of a group can misbehave when spawned on their own.
 
-    Turn this off for the vanilla rule, where a dead survivor is gone for good.
+    Turn this off for the vanilla rule, where a dead survivor is gone for good
+    until a new run starts.
 
     This option has no effect if ScoopSanity is off.
     """
@@ -524,7 +526,8 @@ class SplitKeys(Toggle):
     Keys work in both directions. The 'Leisure Park - Paradise Plaza Key' opens the door from
     both Leisure Park into Paradise Plaza and from Paradise Plaza into Leisure Park.
 
-    Each key is named by area alphabetically (Crislip's - North, Food - Fresca, etc).
+    Each key is named by alphabetically using full area names, such as
+    "Crislip's Home Saloon - North Plaza Key", "Al Fresca Plaza - Food Court Key", etc.
 
     This makes the mall even more mazelike, increasing the difficulty. It also means
     that, even if you already have access to an area through another path, each key
