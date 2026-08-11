@@ -6,7 +6,7 @@ Outputs into tools/release_out/:
 
 The zip carries source/autorun as reframework/autorun AND source/data as
 reframework/data. Both halves are required: SharedData reads drdr_shared.json
-from the data folder at runtime, Bridge reads drdr_items.json and
+from the data folder at runtime, DoorRandomizer reads drdr_doors.json and
 DoorVisualizer reads Mall.png. A zip without them installs a mod that loads
 and then finds no scoop data and registers no item handlers.
 
@@ -117,8 +117,9 @@ def main():
                 arc = "reframework/autorun/" + os.path.relpath(full, autorun).replace(os.sep, "/")
                 z.write(full, arc)
         # SharedData reads drdr_shared.json from reframework/data at runtime,
-        # Bridge reads drdr_items.json and DoorVisualizer reads Mall.png.
-        # Omitting them shipped a mod that loaded and then had no data at all.
+        # DoorRandomizer reads drdr_doors.json and DoorVisualizer reads
+        # Mall.png. Omitting them shipped a mod that loaded and then had no
+        # data at all.
         for root, dirs, files in os.walk(data):
             for f in files:
                 if f in DATA_SKIP:
