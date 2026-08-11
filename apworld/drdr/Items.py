@@ -456,6 +456,8 @@ specialty_items = {
     "Frying Pan",      # gates "Heat a pan on N stoves" locations
     "Uncooked Pizza",  # gates "Use N Microwaves" (alongside Raw Meat)
     "Raw Meat",        # gates "Use N Microwaves" (alongside Uncooked Pizza)
+    # Required for Honey Hunt in restricted_item_mode:
+    "Queen",
 }
 
 # Food items that stand in for Seon's Food and Stuff access in the

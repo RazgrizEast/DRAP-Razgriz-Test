@@ -703,7 +703,7 @@ def set_rules(world) -> None:
         world.set_rule(world.multiworld.get_location("Give Isabela 2 Queens", world.player), And(CanReachLocation("Scramble for a Suppressant"), CanReachRegion("Carlito's Hideout")))
         world.set_rule(world.multiworld.get_location("Give Isabela 3 Queens", world.player), And(CanReachLocation("Scramble for a Suppressant"), CanReachRegion("Carlito's Hideout")))
         world.set_rule(world.multiworld.get_location("Give Isabela 4 Queens", world.player), And(CanReachLocation("Scramble for a Suppressant"), CanReachRegion("Carlito's Hideout")))
-        world.set_rule(world.multiworld.get_location("Honey Hunt", world.player), CanReachLocation("Scramble for a Suppressant"))
+        world.set_rule(world.multiworld.get_location("Honey Hunt", world.player), And(CanReachLocation("Scramble for a Suppressant"), Has("Queen") if world.options.restricted_item_mode else True_()))
 
         world.set_rule(world.multiworld.get_location("Proceed through the cave with Isabela", world.player), CanReachLocation("Honey Hunt"))
 
