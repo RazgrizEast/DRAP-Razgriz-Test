@@ -15,6 +15,7 @@ local Shared = require("DRAP/Shared")
 local SharedData = require("DRAP/SharedData")
 local Activation = require("DRAP/Activation")
 local ItemEffects = require("DRAP/ItemEffects")
+local ScoopState = require("DRAP/scoops/ScoopState")
 
 local M = Shared.create_module("OvertimeItemGate")
 
@@ -42,6 +43,23 @@ local console_override = false
 local verbose = false
 -- Say why nothing happened, once per reason.
 local said = {}
+
+-- Nothing here may touch the game before Overtime. There are two First Aid
+-- Kits: one for Medicine Run in the main game and one for the suppressants.
+-- They share the class name uOm21c, so the pickup block applied to Medicine
+-- Run's kit as well -- it sat there and could not be taken, and Jessie would
+-- not accept the one already held, with no way back. Reported 2026-08-11 from
+-- a run where the item arrived 80 minutes before Overtime began.
+--
+-- "Get bit!" sets endgame, which is persisted, and the event reaches
+-- ScoopUnlocker in every mode rather than only under ScoopSanity.
+local overtime_override = false
+
+local function in_overtime()
+    if overtime_override then return true end
+    local ok, v = pcall(ScoopState.is_endgame_reached)
+    return ok and v == true
+end
 
 local function say_once(key, msg)
     if said[key] then return end
@@ -127,6 +145,13 @@ end
 --- would have set puts it in Key Items and despawns the world object, so the
 --- player never walks back for something they already own.
 local function grant(item)
+    -- Deferred, not dropped: the caller keeps it in pending_grant and this is
+    -- retried every frame, so it lands the moment Overtime starts.
+    if not in_overtime() then
+        say_once("early:" .. item.name,
+            item.name .. " received before Overtime -- held until it starts")
+        return false
+    end
     local efm = sdk.get_managed_singleton("app.solid.gamemastering.EventFlagsManager")
     if not efm then return false end
     local set = 0
@@ -253,6 +278,9 @@ end
 --- @return boolean true when the pickup should be suppressed
 local function should_block(pim)
     if not enabled then return false end
+    -- uOm21c is both First Aid Kits. Holding it outside Overtime blocks
+    -- Medicine Run, which is what the soft lock report was.
+    if not in_overtime() then return false end
 
     local go_name = current_object_name(pim)
     if verbose then
@@ -312,7 +340,7 @@ local function should_block(pim)
 end
 
 local function cave_blocked()
-    if not (enabled and gating) then return false end
+    if not (enabled and gating and in_overtime()) then return false end
     if not (Activation.is_active() or console_override) then return false end
     return not has_received(CAVE_ITEM)
 end
@@ -542,6 +570,7 @@ end
 --- the time the player has pressed the button. Clearing the current
 --- interaction each frame is what actually takes the prompt away.
 local function suppress_current()
+    if not in_overtime() then return end
     local pim = sdk.get_managed_singleton(PIM_TYPE)
     if not pim then return end
     local go_name = current_object_name(pim)
@@ -626,7 +655,7 @@ end
 --- The prompt is held, so without this the Humvee reads as scenery and the
 --- player has no idea what they are missing.
 local function check_humvee_proximity()
-    if not gating then near_humvee = false; return end
+    if not (gating and in_overtime()) then near_humvee = false; return end
     if has_received(HUMVEE_ITEM) then near_humvee = false; return end
     if current_scene_code() ~= HUMVEE_SCENE then near_humvee = false; return end
 
@@ -771,6 +800,14 @@ _G.drap_ot_gate = function(on)
     M.set_enabled(on, true)
 end
 
+--- Forces the Overtime check, for testing the gate before Get bit!.
+_G.drap_ot_overtime = function(on)
+    overtime_override = (on ~= false)
+    M.log("Overtime override " .. (overtime_override and "ON" or "off")
+        .. " (real state: " .. tostring(select(2, pcall(ScoopState.is_endgame_reached))) .. ")")
+    return overtime_override
+end
+
 --- drap_ot_gating(true) -- stands in for Overtime Progression Gating being on
 _G.drap_ot_gating = function(on)
     if on == nil then on = not M.is_gating() end
@@ -874,6 +911,8 @@ _G.drap_ot_gate_status = function()
             class_name, item.name, tostring(has_received(item.name)),
             tostring(sent[item.name] == true)))
     end
+    M.log(string.format("  in Overtime: %s%s", tostring(in_overtime()),
+        overtime_override and " (forced)" or ""))
 end
 
 return M
