@@ -624,6 +624,9 @@ class DRWorld(World):
             item_classification = ItemClassification.progression
         elif name in specialty_items and self.options.restricted_item_mode:
             item_classification = ItemClassification.progression
+        elif name == "Queen" and self.options.scoop_sanity:
+            # Gates queen spawning, so state.has must be able to see it.
+            item_classification = ItemClassification.progression
         elif name in microwave_food_items and self.options.pp_bonus_locations:
             # Food items bypass the Seon's requirement in the microwave
             # rules, so state.has must be able to see them in every mode.

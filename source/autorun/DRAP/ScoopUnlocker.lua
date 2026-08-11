@@ -596,7 +596,34 @@ local ENDGAME_FLAGS = { 2052, 514 }
 -- Hideout's secondary while active). Holding it on post-Jessie is a state
 -- vanilla never sees and is the suspected (unproven) cause of the Twin Sisters
 -- no-spawn -- keep it phase-managed only.
-local POST_JESSIE_FLAGS = { 267, 315, 513, 515 }
+local POST_JESSIE_FLAGS = { 267, 513, 515 }
+-- Queen spawning across the mall. Meeting Jessie used to switch it on with the
+-- rest of the post-Jessie set; it now waits for the Queen item, so the five
+-- Isabela hand-ins are behind the multiworld like anything else.
+local QUEEN_SPAWN_FLAG = 315
+
+local function queens_unlocked()
+    local bridge = AP and AP.AP_BRIDGE
+    return (bridge and bridge.has_item_name
+            and bridge.has_item_name("Queen")) == true
+end
+
+--- Held off before the item and on after. Off is enforced as well as on: the
+--- game turns it on by itself once Jessie is met, so leaving it alone would
+--- let queens spawn anyway.
+local function enforce_queen_spawning()
+    local want_on = queens_unlocked()
+    local is_on = raw_check_flag(QUEEN_SPAWN_FLAG)
+    if want_on == is_on then return end
+    if want_on then
+        currently_unlocking = true
+        raw_set_flag_on(QUEEN_SPAWN_FLAG)
+        currently_unlocking = false
+        M.log("Queen received -- queens now spawn")
+    else
+        raw_set_flag_off(QUEEN_SPAWN_FLAG)
+    end
+end
 local CULT_ON = { 326, 811, 1166, 2063 }
 local CULT_OFF = {
     783,                                      -- scoop start flags
@@ -684,8 +711,10 @@ local function enforce_flags_legacy()
     end
 
     enforce_blacklist()
+    enforce_queen_spawning()
 
-    -- Ensure post-Jessie flags stay enabled (267 = progression, 315 = queen spawning; 265 excluded -- see POST_JESSIE_FLAGS)
+    -- Ensure post-Jessie flags stay enabled (267 = progression; 265 and 315
+    -- excluded -- see POST_JESSIE_FLAGS and enforce_queen_spawning)
     if State.is_activated() then
         local post_jessie_flags = { table.unpack(POST_JESSIE_FLAGS) }
         -- Savior mode (without ScoopSanity): force flag 270 always-on so the
@@ -1015,6 +1044,7 @@ local function get_reconciler_policies()
             protected_primary_flags = PROTECTED_PRIMARY_FLAGS,
             main_blocks_side = MAIN_BLOCKS_SIDE,
             post_jessie_flags = POST_JESSIE_FLAGS,
+            queen_spawn_flag = QUEEN_SPAWN_FLAG,
             cult_on = CULT_ON,
             cult_off = CULT_OFF,
             endgame_flags = ENDGAME_FLAGS,
@@ -1035,6 +1065,7 @@ end
 local function build_reconciler_ctx()
     return {
         activated = State.is_activated(),
+        queens_unlocked = queens_unlocked(),
         endgame = State.is_endgame_reached(),
         scoop_sanity = scoop_sanity_enabled,
         cult_limited = cult_limited_enabled,
@@ -1269,7 +1300,7 @@ local function activate_ap(reason)
     State.set_activated(true)
     M.log(reason or "AP enforcement activated")
     -- Enable flags needed after Meet Jessie
-    local post_jessie_flags = { 265, 267, 315, 514 }
+    local post_jessie_flags = { 265, 267, 514 }
     -- Savior mode (without ScoopSanity): fire flag 270 immediately so the
     -- EP-shutter cutscene plays naturally on EP entry. Under ScoopSanity,
     -- the position-gated path (try_fire_ep270_in_scoop_sanity) handles it

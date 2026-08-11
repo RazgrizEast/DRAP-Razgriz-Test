@@ -561,6 +561,15 @@ def BuildItemPool(multiworld, count, options, excluded_scoop_names=(),
             item_pool.append(item)
             remaining_count = remaining_count - 1
             included_itemcount = included_itemcount + 1
+    elif options.scoop_sanity.value:
+        # Queen spawning across the mall waits for this item under ScoopSanity,
+        # so one has to exist even when Restricted mode is off -- otherwise the
+        # five Isabela hand-ins have nothing to collect. Restricted mode already
+        # supplies it through specialty_items.
+        item = item_dictionary["Queen"]
+        item_pool.append(item)
+        remaining_count = remaining_count - 1
+        included_itemcount = included_itemcount + 1
 
     itemList = [item for item in _all_items]
     lockList = [item for item in _all_items if item.category == DRItemCategory.LOCK]
