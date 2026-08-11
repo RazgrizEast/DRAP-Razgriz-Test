@@ -70,9 +70,10 @@ class DRLocation(Location):
             "Colby's Movieland",
             "Maintenance Tunnel",
             "Carlito's Hideout",
-            "Tunnels",
+            "Cave",
             "Level Ups",
-            "Challenges"
+            "Challenges",
+            "Meat Processing Area"
         ]
 
         output = {}
@@ -136,6 +137,12 @@ location_tables = {
         # with no ID. Lua sends this check once the player has rescued their
         # target number of survivors.
         DRLocationData("Savior: Rescue enough survivors to escape", "Victory", DRLocationCategory.EVENT),
+
+
+        # Overtime suppressant ingredients. Named "Find the ..." so the
+        # Overtime First Aid Kit cannot be confused with the story one,
+        # which is also in Seon's.
+        DRLocationData("Find the Coffee Filters", "Milk", DRLocationCategory.OVERTIME_SCOOP),
     ],
 
     "Rooftop": [
@@ -191,6 +198,13 @@ location_tables = {
         DRLocationData("Photograph PP Sticker 12", "Pie", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 13", "Baguette", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 14", "Orange Juice", DRLocationCategory.PP_STICKER),
+
+
+        # Overtime suppressant ingredients. Named "Find the ..." so the
+        # Overtime First Aid Kit cannot be confused with the story one,
+        # which is also in Seon's.
+        DRLocationData("Find the Developing Solution", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Find the Cold Spray", "Milk", DRLocationCategory.OVERTIME_SCOOP),
     ],
 
     "Entrance Plaza": [
@@ -218,6 +232,13 @@ location_tables = {
         DRLocationData("Photograph PP Sticker 32", "Pie", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 33", "Baguette", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 34", "Orange Juice", DRLocationCategory.PP_STICKER),
+
+
+        # Overtime suppressant ingredients. Named "Find the ..." so the
+        # Overtime First Aid Kit cannot be confused with the story one,
+        # which is also in Seon's.
+        DRLocationData("Find the Camp Stove", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Find the Perfume Bottle", "Milk", DRLocationCategory.OVERTIME_SCOOP),
     ],
 
     "Al Fresca Plaza": [
@@ -250,6 +271,7 @@ location_tables = {
 
         # Events in Leisure Park
         DRLocationData("See the crashed helicopter", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Hella Copter - Shoot down the Special Forces Helicopter", "Milk", DRLocationCategory.OVERTIME_SCOOP),
         # DRLocationData("Ending D: Be a prisoner when time runs out", "Milk", DRLocationCategory.MAIN_SCOOP),
 
         # PP Stickers in Leisure Park
@@ -259,6 +281,10 @@ location_tables = {
         DRLocationData("Photograph PP Sticker 89", "Well Done Steak", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 98", "Wine", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 99", "Well Done Steak", DRLocationCategory.PP_STICKER),
+
+        # Appended rather than filed with the other convict entry above, since
+        # ids come from list position.
+        DRLocationData("Kill the convicts", "Milk", DRLocationCategory.PSYCHO_SCOOP),
     ],
 
     "Wonderland Plaza": [
@@ -305,6 +331,12 @@ location_tables = {
         DRLocationData("Photograph PP Sticker 69", "Well Done Steak", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 70", "Yogurt", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 71", "Apple", DRLocationCategory.PP_STICKER),
+
+
+        # Overtime suppressant ingredients. Named "Find the ..." so the
+        # Overtime First Aid Kit cannot be confused with the story one,
+        # which is also in Seon's.
+        DRLocationData("Find the Magnifying Glass", "Milk", DRLocationCategory.OVERTIME_SCOOP),
     ],
 
     "North Plaza": [
@@ -348,6 +380,12 @@ location_tables = {
         DRLocationData("Photograph PP Sticker 83", "Baguette", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 84", "Orange Juice", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 85", "Uncooked Pizza", DRLocationCategory.PP_STICKER),
+
+
+        # Overtime suppressant ingredients. Named "Find the ..." so the
+        # Overtime First Aid Kit cannot be confused with the story one,
+        # which is also in Seon's.
+        DRLocationData("Find the First Aid Kit", "Milk", DRLocationCategory.OVERTIME_SCOOP),
     ],
     "Food Court": [
         # Events in Food Court
@@ -368,6 +406,12 @@ location_tables = {
         DRLocationData("Photograph PP Sticker 54", "Orange Juice", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 55", "Uncooked Pizza", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 56", "Milk", DRLocationCategory.PP_STICKER),
+
+
+        # Overtime suppressant ingredients. Named "Find the ..." so the
+        # Overtime First Aid Kit cannot be confused with the story one,
+        # which is also in Seon's.
+        DRLocationData("Find the Blender", "Milk", DRLocationCategory.OVERTIME_SCOOP),
     ],
     "Crislip's Home Saloon": [
         # Events in Crislip's Home Saloon
@@ -408,8 +452,6 @@ location_tables = {
         # Events in Maintenance Tunnel
         DRLocationData("Complete Bomb Collector", "Milk", DRLocationCategory.MAIN_SCOOP),
         DRLocationData("Beat Drivin Carlito", "Milk", DRLocationCategory.MAIN_SCOOP),
-        DRLocationData("Meet Larry", "Milk", DRLocationCategory.MAIN_SCOOP),
-        DRLocationData("Complete The Butcher", "Milk", DRLocationCategory.MAIN_SCOOP),
 
         # PP Stickers in Maintenance Tunnel
         DRLocationData("Photograph PP Sticker 90", "Yogurt", DRLocationCategory.PP_STICKER),
@@ -417,6 +459,15 @@ location_tables = {
         DRLocationData("Photograph PP Sticker 92", "Pie", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 93", "Baguette", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 94", "Orange Juice", DRLocationCategory.PP_STICKER),
+    ],
+
+    # Off the Maintenance Tunnel and nothing else, so its key gates all four.
+    "Meat Processing Area": [
+        # Events in the Meat Processing Area
+        DRLocationData("Meet Larry", "Milk", DRLocationCategory.MAIN_SCOOP),
+        DRLocationData("Complete The Butcher", "Milk", DRLocationCategory.MAIN_SCOOP),
+
+        # PP Stickers in the Meat Processing Area
         DRLocationData("Photograph PP Sticker 95", "Uncooked Pizza", DRLocationCategory.PP_STICKER),
         DRLocationData("Photograph PP Sticker 96", "Milk", DRLocationCategory.PP_STICKER),
     ],
@@ -425,13 +476,36 @@ location_tables = {
         # Events in Carlito's Hideout
         DRLocationData("Escort Isabela to Carlito's Hideout and have a chat", "Milk", DRLocationCategory.MAIN_SCOOP),
         DRLocationData("Complete Memories", "Milk", DRLocationCategory.MAIN_SCOOP),
-        DRLocationData("Gather the suppressants and generator and talk to Isabela", "Milk", DRLocationCategory.OVERTIME_SCOOP),
-        DRLocationData("Give Isabela 5 queens", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Scramble for a Suppressant", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Honey Hunt", "Milk", DRLocationCategory.OVERTIME_SCOOP),
 
+
+        # The Generator is the ninth cooking-equipment entry and is not
+        # gated: it can arrive by cutscene instead of being picked up, and
+        # that path sets no flags. Only its delivery is a check.
+        DRLocationData("Give Isabela the Generator", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Give Isabela the Blender", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Give Isabela the First Aid Kit", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Give Isabela the Coffee Filters", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Give Isabela the Magnifying Glass", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Give Isabela the Camp Stove", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Give Isabela the Developing Solution", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Give Isabela the Perfume Bottle", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Give Isabela the Cold Spray", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+
+        # Queens one to four. The fifth is Honey Hunt, which the game
+        # already marks with its own flag.
+        DRLocationData("Give Isabela 1 Queen", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Give Isabela 2 Queens", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Give Isabela 3 Queens", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Give Isabela 4 Queens", "Milk", DRLocationCategory.OVERTIME_SCOOP),
     ],
 
-    "Tunnels": [
-        DRLocationData("Reach the end of the tunnel with Isabela", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+    "Cave": [
+        DRLocationData("Proceed through the cave with Isabela", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Open Gate 1", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Open Gate 2", "Milk", DRLocationCategory.OVERTIME_SCOOP),
+        DRLocationData("Raise the final gate", "Milk", DRLocationCategory.OVERTIME_SCOOP),
         DRLocationData("Get to the Humvee", "Milk", DRLocationCategory.OVERTIME_SCOOP),
         DRLocationData("Fight a tank and win", "Milk", DRLocationCategory.OVERTIME_SCOOP),
         DRLocationData("Ending S: Beat up Brock with your bare fists!", "Victory", DRLocationCategory.EVENT),
@@ -547,6 +621,10 @@ location_tables = {
         DRLocationData("Bowl over 5 zombies", "Milk", DRLocationCategory.CHALLENGE),
         DRLocationData("Jump a vehicle 50 feet", "Milk", DRLocationCategory.CHALLENGE),
         DRLocationData("Hit a golf ball 100 feet", "Milk", DRLocationCategory.CHALLENGE),
+        # Appended, never inserted: ids are positional within the table.
+        # Both are sphere 0 by way of the Challenges blanket rule -- see #14.
+        DRLocationData("Welcome to Hell", "Milk", DRLocationCategory.CHALLENGE),
+        DRLocationData("Photojournalist", "Milk", DRLocationCategory.CHALLENGE),
 
     ]
 }

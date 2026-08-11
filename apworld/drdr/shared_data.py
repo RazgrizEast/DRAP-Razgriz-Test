@@ -84,6 +84,10 @@ SCOOPS: List[Dict[str, Any]] = _DATA.get("scoops", [])
 # Kept here so the event strings can be validated against Locations.py.
 COMPLETION_FLAGS: List[Dict[str, Any]] = _DATA.get("completion_flags", [])
 
+# The nine Overtime suppressant objects, read from the game's own
+# EventSetCookingEquipment.CookInfos.
+OVERTIME_ITEMS: List[Dict[str, Any]] = _DATA.get("overtime_items", [])
+
 if SCHEMA_VERSION >= 2 and not SCOOPS:
     raise ValueError(
         "drdr_shared.json declares schema_version >= 2 but has no 'scoops' "
@@ -191,7 +195,49 @@ AREA_KEY_NAMES: List[str] = [
     if a.get("in_item_pool") and a.get("key_item")
 ]
 
+# Main scoops that chain, mapped to the event that completes them, and
+# the event list per scoop. Both are read by the rules and by the
+# startup validation, so they live with the data they derive from.
+SCOOP_COMPLETION_MAP = {
+    s["name"]: s["completion_event"]
+    for s in SCOOPS
+    if s.get("category") == "Main" and s.get("chain_eligible")
+    and s.get("completion_event")
+}
+
+# Event list per scoop. Drives the ScoopSanity per-event override loop in
+# set_rules (each event is gated on the scoop). SCOOP_COMPLETION_MAP[scoop]
+# must appear in the list (it need not be last -- e.g. The Last Resort gates
+# an extra "Beat Drivin Carlito" after its completion).
+SCOOP_EVENTS = {
+    s["name"]: s["events"] for s in SCOOPS if s.get("events")
+}
+
 SPLIT_AREA_NAMES: List[str] = [s["name"] for s in SPLIT_AREAS if s.get("name")]
+
+SPLIT_KEY_NAMES: List[str] = [s["key_item"] for s in SPLIT_AREAS if s.get("key_item")]
+
+# Area code -> the codes reachable through one door. Read by the rules for
+# sanity checks and by the mod to answer "can the player get there yet",
+# which is what stops a scoop starting behind a locked door.
+AREA_GRAPH: Dict[str, List[str]] = _DATA.get("area_graph", {})
+
+# Split Keys only: escorts that walk a fixed route need those exact doors, so
+# reaching the regions another way is not enough. The mod gates on the same
+# list, or it starts a mission the logic says is not available.
+SCOOP_SPLIT_KEY_DOORS: Dict[str, List[str]] = {
+    s["name"]: list(s["required_split_keys"])
+    for s in SCOOPS
+    if s.get("required_split_keys")
+}
+
+# Region(s) the player must physically reach to complete each scoop. Lives
+# here rather than in Rules.py because the mod gates on the same list.
+SCOOP_REGION_REQUIREMENTS: Dict[str, List[str]] = {
+    s["name"]: list(s["required_regions"])
+    for s in SCOOPS
+    if s.get("required_regions")
+}
 
 TIME_KEY_NAMES: List[str] = [t["name"] for t in TIME_KEYS if t.get("name")]
 

@@ -17,9 +17,11 @@ local Logger = require("DRAP/Logger")
 Logger.info("DRAP", string.format("DRAP %s starting -- session log: %s",
     Logger.VERSION, Logger.get_path() or "console only (file open failed)"))
 
+local Activation = require("DRAP/Activation")
 local AP_BRIDGE = require("DRAP/Bridge")
 
 AP = AP or {}
+AP.Activation       = Activation
 AP.AP_BRIDGE        = AP_BRIDGE
 AP.ItemSpawner      = require("DRAP/ItemSpawner")
 AP.ItemRestriction  = require("DRAP/ItemRestriction")
@@ -32,6 +34,7 @@ AP.LevelTracker     = require("DRAP/trackers/LevelTracker")
 AP.EventTracker     = require("DRAP/trackers/EventTracker")
 AP.NpcTracker       = require("DRAP/trackers/NpcTracker")
 AP.PPStickerTracker = require("DRAP/trackers/PPStickerTracker")
+AP.AchievementTracker = require("DRAP/trackers/AchievementTracker")
 AP.SaveSlot         = require("DRAP/SaveSlot")
 AP.SaveDiagnostics  = require("DRAP/SaveDiagnostics")
 AP.TimeGate         = require("DRAP/TimeGate")
@@ -51,6 +54,8 @@ AP.EventFlagExplorer = require("DRAP/debug/EventFlagExplorer")
 -- FlagTraceRecorder self-registers its own re.on_frame (it must keep
 -- recording during cutscenes, where the isInGame-gated loop below stops).
 AP.FlagTraceRecorder = require("DRAP/debug/FlagTraceRecorder")
+-- Console-only: reads state the flag trace cannot see.
+AP.StateProbe = require("DRAP/debug/StateProbe")
 
 local Shared = require("DRAP/Shared")
 local SharedData = require("DRAP/SharedData")
@@ -117,6 +122,7 @@ end
 
 AP.effects = AP.effects or {}
 AP.effects.AreaKeyEffects             = require("DRAP/effects/AreaKeyEffects")
+AP.effects.SplitKeyEffects            = require("DRAP/effects/SplitKeyEffects")
 AP.effects.TimeLockEffects            = require("DRAP/effects/TimeLockEffects")
 AP.effects.VictoryEffects             = require("DRAP/effects/VictoryEffects")
 AP.effects.SurvivorScoopCompletion    = require("DRAP/effects/SurvivorScoopCompletion")
@@ -124,6 +130,9 @@ AP.effects.SaviorGoalEffects          = require("DRAP/effects/SaviorGoalEffects"
 AP.effects.BookSkills                 = require("DRAP/effects/BookSkills")
 AP.effects.BookGuards                 = require("DRAP/effects/BookGuards")
 AP.effects.NpcInfoSweeper             = require("DRAP/effects/NpcInfoSweeper")
+AP.effects.NpcSaveGuard               = require("DRAP/effects/NpcSaveGuard")
+AP.effects.ConvictRespawnTrap         = require("DRAP/effects/ConvictRespawnTrap")
+AP.TrapBank                           = require("DRAP/TrapBank")
 AP.effects.SurvivorRecovery           = require("DRAP/effects/SurvivorRecovery")
 AP.effects.PartyHudGuard              = require("DRAP/effects/PartyHudGuard")
 AP.effects.PlayerStats                = require("DRAP/effects/PlayerStats")
@@ -133,8 +142,10 @@ AP.effects.ZombieEffects              = require("DRAP/effects/ZombieEffects")
 AP.effects.CostumeRandomizer          = require("DRAP/effects/CostumeRandomizer")
 AP.effects.AP_LocationTriggers        = require("DRAP/effects/AP_LocationTriggers")
 AP.effects.DoorPromptOverlay          = require("DRAP/effects/DoorPromptOverlay")
+AP.effects.OvertimeItemGate           = require("DRAP/effects/OvertimeItemGate")
 
 AP.effects.AreaKeyEffects.register_all()
+AP.effects.SplitKeyEffects.register_all()
 AP.effects.TimeLockEffects.register_all()
 AP.effects.VictoryEffects.register_all()
 AP.effects.SurvivorScoopCompletion.register_all()
@@ -144,10 +155,12 @@ AP.effects.BookGuards.register_all()
 AP.effects.PlayerStats.register()
 AP.effects.PlayerBuffs.register()
 AP.effects.HostileSurvivorTrap.register()
+AP.effects.ConvictRespawnTrap.register()
 AP.effects.ZombieEffects.register()
 AP.effects.CostumeRandomizer.register()
 AP.effects.AP_LocationTriggers.register()
 AP.effects.DoorPromptOverlay.register()
+AP.effects.OvertimeItemGate.register()
 
 -- Per-scene fixups (e.g. disable s136 safe-room barricade once Jessie is met
 -- under ScoopSanity). Hooks AreaManager.onLoadMapEvent.
@@ -156,6 +169,12 @@ AP.SceneFixups.register()
 ------------------------------------------------------------
 -- Hook Wiring: Level Tracker
 ------------------------------------------------------------
+
+-- Achievement pop-ups are their own event, not a counted save field, so they
+-- arrive already resolved to a location name.
+AP.AchievementTracker.on_location_earned = function(loc_name)
+    AP_BRIDGE.check(loc_name)
+end
 
 AP.LevelTracker.on_level_changed = function(old_level, new_level)
     log(string.format("Level changed %d -> %d", old_level, new_level))
@@ -178,6 +197,12 @@ AP.EventTracker.on_tracked_location = function(desc, source, raw_id, extra)
 
     log(string.format("Tracked location: %s", tostring(desc)))
     AP.AP_BRIDGE.check(desc)
+
+    -- Cutscene-staged survivors wait on their scoop's cutscene rather
+    -- than on a sibling being alive, so tell SurvivorRecovery it ran.
+    if AP.effects.SurvivorRecovery.note_tracked_location then
+        pcall(AP.effects.SurvivorRecovery.note_tracked_location, desc)
+    end
 
     -- Forward events to ScoopUnlocker for milestone/chain tracking
     if AP.ScoopUnlocker and AP.ScoopUnlocker.on_event_tracked then
@@ -289,6 +314,10 @@ local function run_slot_connect(slot_data)
 
     log("Slot connected: slot=" .. slot .. " seed=" .. seed)
 
+    -- Before any of the restore below: the mod is dormant until here, and
+    -- everything that follows expects to be running for real.
+    Activation.activate("slot " .. slot)
+
     -- Bridge persistence FIRST: everything below may consult completed-check
     -- history (e.g. AP_LocationTriggers.setup() bootstraps its counted-entry
     -- counters from AP_BRIDGE.is_completed(); loading checks after setup() ran
@@ -307,6 +336,8 @@ local function run_slot_connect(slot_data)
     -- is what initializes the ledger this reads its section from. Without it a
     -- survivor killed in an earlier session looks like a broken spawn.
     AP.effects.SurvivorRecovery.load_census()
+    -- Trap payout tallies, same ledger, same moment.
+    AP.TrapBank.load()
 
     -- Set up sticker save file
     if AP.PPStickerTracker.set_save_filename then
@@ -351,11 +382,52 @@ local function run_slot_connect(slot_data)
         AP.DoorRandomizer.clear_redirects()
     end
 
+    -- Door Locks. Has to come after the redirects land, or the first rescan
+    -- would judge every door by its vanilla destination.
+    local door_locks_enabled = (type(slot_data) == "table" and slot_data.door_locks == true)
+    AP.DoorLocksEnabled = door_locks_enabled
+    if AP.DoorSceneLock then
+        AP.DoorSceneLock.set_door_locks_enabled(door_locks_enabled,
+            type(slot_data) == "table" and slot_data.area_graph or nil)
+    end
+    log("Door Locks enabled=" .. tostring(door_locks_enabled))
+
+    -- Split Keys option. Door randomization grants every split key up front,
+    -- so the locks still go on and simply open as those keys arrive.
+    local split_keys_enabled = (type(slot_data) == "table" and slot_data.split_keys == true)
+    AP.SplitKeysEnabled = split_keys_enabled
+    if AP.DoorSceneLock then
+        AP.DoorSceneLock.set_split_keys_enabled(split_keys_enabled)
+    end
+    AP.ScoopUnlocker.set_split_keys_enabled(split_keys_enabled)
+    log("Split Keys enabled=" .. tostring(split_keys_enabled))
+
+    -- Main Scoops In Any Order: the chain stops auto-advancing and the
+    -- player picks the next main scoop from the Scoops window.
+    local any_order_enabled = (type(slot_data) == "table"
+        and slot_data.main_scoops_any_order == true)
+    AP.MainScoopsAnyOrder = any_order_enabled
+    AP.ScoopUnlocker.set_any_order_enabled(any_order_enabled)
+    log("Main scoops in any order enabled=" .. tostring(any_order_enabled))
+
     -- Goal option
     local goal = (type(slot_data) == "table" and slot_data.goal) or 0
     AP.Goal = goal
     local goal_names = { [0] = "Ending S", [1] = "Ending A", [2] = "Savior" }
     log("Goal: " .. (goal_names[goal] or tostring(goal)))
+
+    -- Overtime suppressant gating. Ending S only, because that is the only
+    -- goal whose seed carries the eight items -- and every Ending S seed,
+    -- ScoopSanity or not, since the eight are what stops the run finishing
+    -- the moment Ending A does.
+    -- Gating is opt-in: with it off the module still sends the Overtime
+    -- checks, it just holds nothing back.
+    local overtime_gating = type(slot_data) == "table"
+        and slot_data.overtime_progression_gating == true
+    AP.OvertimeGatingEnabled = overtime_gating
+    if AP.effects.OvertimeItemGate then
+        AP.effects.OvertimeItemGate.set_enabled(goal == 0, false, overtime_gating)
+    end
 
     -- Number of survivors (only meaningful when goal == 2, Savior)
     AP.NumberOfSurvivors = (type(slot_data) == "table" and tonumber(slot_data.number_of_survivors)) or 35
@@ -382,7 +454,17 @@ local function run_slot_connect(slot_data)
         and slot_data.survivor_respawn == false)
     AP.SurvivorRespawnEnabled = survivor_respawn_enabled
     AP.effects.SurvivorRecovery.set_survivor_respawn_enabled(survivor_respawn_enabled)
-    log("Survivor Respawn enabled=" .. tostring(survivor_respawn_enabled))
+    -- The option only does anything while the repair paths are live, and they
+    -- ship disabled. A bare "enabled=true" in a field log reads as "respawns
+    -- are happening" and would send the next investigation the wrong way.
+    local respawn_note = ""
+    if survivor_respawn_enabled
+        and AP.effects.SurvivorRecovery.is_repair_enabled
+        and not AP.effects.SurvivorRecovery.is_repair_enabled() then
+        respawn_note = " (inert -- survivor repair is disabled in this build)"
+    end
+    log("Survivor Respawn enabled=" .. tostring(survivor_respawn_enabled)
+        .. respawn_note)
 
     -- Goal mode for ScoopUnlocker -- used to fire flag 270 (Backup for Brad
     -- cutscene that opens EP shutters) on Meet-Jessie when goal is Savior.
@@ -461,10 +543,14 @@ local function run_slot_connect(slot_data)
     -- The overlay shows whenever the player approaches a door whose
     -- destination has been redirected for this seed. Empty table when
     -- door_randomizer is off, in which case setup() disables cleanly.
+    -- Under Door Locks a locked door raises no prompt at all, so the overlay
+    -- also takes per-door positions and answers on proximity instead.
     if AP.effects.DoorPromptOverlay then
         local overlay = (type(slot_data) == "table"
                          and slot_data.door_overlay_data) or {}
-        AP.effects.DoorPromptOverlay.setup(overlay)
+        local anchors = (type(slot_data) == "table"
+                         and slot_data.door_anchors) or {}
+        AP.effects.DoorPromptOverlay.setup(overlay, anchors)
     end
 
     -- Re-apply time freeze if needed (ScoopSanity only -- handles mid-game reconnect
@@ -519,6 +605,13 @@ local function on_enter_game()
     new_game_checked = false
 end
 
+-- Connecting while already in game skips the enter-game edge, so ask for the
+-- reapply directly or a mid-session connect restores nothing.
+Activation.on_activate(function()
+    pending_reapply = true
+    new_game_checked = false
+end)
+
 local function try_reapply_if_ready()
     if not pending_reapply then return end
     if not AP.ItemSpawner.inventory_system_running() then return end
@@ -543,6 +636,7 @@ local function try_reapply_if_ready()
     AP_BRIDGE.reapply_all_items()
     AP.ScoopUnlocker.reapply_unlocked_scoops()
     AP.effects.AreaKeyEffects.reapply()
+    AP.effects.SplitKeyEffects.reapply()
     AP.effects.TimeLockEffects.reapply()
     AP.effects.SurvivorScoopCompletion.reapply()
     AP.effects.SaviorGoalEffects.reapply()
@@ -595,6 +689,17 @@ re.on_frame(function()
         return
     end
 
+    -- No slot connected: vanilla. Nothing touches the game and nothing
+    -- watches it, so a later connect cannot flush another save to the server.
+    if not Activation.is_active() then
+        -- The two exceptions: inert in a real vanilla run, and the only
+        -- thing protecting an AP save loaded offline. Leave them outside.
+        safe_on_frame(AP.effects.NpcSaveGuard, "NpcSaveGuard")
+        safe_on_frame(AP.effects.PartyHudGuard, "PartyHudGuard")
+        was_in_game = now_in_game
+        return
+    end
+
     -- Update all modules
     safe_on_frame(AP.ItemSpawner,      "ItemSpawner")
     safe_on_frame(AP.ItemRestriction,  "ItemRestriction")
@@ -603,6 +708,7 @@ re.on_frame(function()
     safe_on_frame(AP.NpcCarryover,     "NpcCarryover")
     safe_on_frame(AP.ChallengeTracker, "ChallengeTracker")
     safe_on_frame(AP.LevelTracker,     "LevelTracker")
+    safe_on_frame(AP.AchievementTracker, "AchievementTracker")
     safe_on_frame(AP.EventTracker,     "EventTracker")
     safe_on_frame(AP.NpcTracker,       "NpcTracker")
     safe_on_frame(AP.TimeGate,         "TimeGate")
@@ -613,6 +719,8 @@ re.on_frame(function()
     safe_on_frame(AP.SaveDiagnostics,  "SaveDiagnostics")
     safe_on_frame(AP.effects.BookGuards, "BookGuards")
     safe_on_frame(AP.effects.NpcInfoSweeper, "NpcInfoSweeper")
+    safe_on_frame(AP.effects.NpcSaveGuard, "NpcSaveGuard")
+    safe_on_frame(AP.TrapBank, "TrapBank")
     safe_on_frame(AP.effects.SurvivorRecovery, "SurvivorRecovery")
     safe_on_frame(AP.effects.PartyHudGuard, "PartyHudGuard")
 

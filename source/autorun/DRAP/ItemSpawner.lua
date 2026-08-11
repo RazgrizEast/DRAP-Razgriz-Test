@@ -35,6 +35,10 @@ local WORLD_PRELOAD_RETRY_S = 2.0     -- re-register cadence while waiting
 
 -- When true, spawning is disabled (Restricted item mode)
 local spawning_disabled = false
+-- Debug: list the whole catalogue instead of what the slot has received, and
+-- ignore the restricted-mode block, so a tester can spawn anything. God Mode
+-- turns this on; nothing else does.
+local show_all_items = false
 
 ------------------------------------------------------------
 -- Singleton Manager
@@ -91,6 +95,22 @@ local function get_bridge()
 end
 
 local function get_received_items_from_bridge()
+    if show_all_items then
+        -- game_item_no straight from the catalogue: no bridge lookup, so this
+        -- works with no slot connected.
+        local SharedData = require("DRAP/SharedData")
+        local out = {}
+        for _, def in ipairs(SharedData.items()) do
+            if def.name and def.item_number then
+                out[#out + 1] = {
+                    item_name = def.name,
+                    game_item_no = def.item_number,
+                    sender_name = "God Mode",
+                }
+            end
+        end
+        return out
+    end
     local bridge = get_bridge()
     if bridge and bridge.get_all_received_items then
         return bridge.get_all_received_items() or {}
@@ -349,7 +369,7 @@ end
 -- (nil, err_string) on failure.
 local function precheck_spawn(item_entry)
     if not item_entry then return nil, "No item provided" end
-    if spawning_disabled then
+    if M.spawning_blocked() then
         return nil, "Spawning disabled (restricted item mode active)"
     end
     if now_time() < global_not_before then
@@ -455,6 +475,24 @@ end
 
 --- Restricted-item-mode toggle. When disabled, the Spawn Selected button
 --- is greyed out and try_spawn_item returns "spawning disabled".
+--- God Mode's item switch: list the whole catalogue and let it spawn even
+--- under restricted item mode.
+--- @param enabled boolean
+function M.set_show_all_items(enabled)
+    show_all_items = enabled == true
+    M.log("Item window: " .. (show_all_items
+        and "whole catalogue, restricted mode ignored"
+        or "received items only"))
+end
+
+function M.is_showing_all_items() return show_all_items end
+
+--- Restricted item mode blocks spawning, unless God Mode is on. One predicate
+--- so the button, its status message and the precheck cannot drift apart.
+function M.spawning_blocked()
+    return spawning_disabled and not show_all_items
+end
+
 function M.set_spawning_disabled(disabled)
     spawning_disabled = (disabled == true)
     M.log("Spawning disabled: " .. tostring(spawning_disabled))
@@ -633,7 +671,7 @@ function M.draw_tab_content(debug)
     local can_spawn = selected_entry and
                       not inventory_full_blocks_spawn() and
                       ensure_inventory() and
-                      not spawning_disabled
+                      not M.spawning_blocked()
 
     if can_spawn then
         if imgui.button("Spawn Selected") then
@@ -653,7 +691,7 @@ function M.draw_tab_content(debug)
     -- Status messages on same line
     imgui.same_line()
     if selected_entry then
-        if spawning_disabled then
+        if M.spawning_blocked() then
             imgui.text_colored("Restricted mode!", 0xFFFF4444)
         elseif inventory_full_blocks_spawn() then
             imgui.text_colored("Inventory full!", 0xFFFF8800)
@@ -682,7 +720,8 @@ function M.draw_tab_content(debug)
         -- restricted item mode status
         if spawning_disabled then
             imgui.same_line()
-            imgui.text_colored(" | RESTRICTED", 0xFFFF4444)
+            imgui.text_colored(show_all_items and " | RESTRICTED (God Mode)"
+                                               or " | RESTRICTED", 0xFFFF4444)
         end
 
         -- Filter controls

@@ -3,6 +3,7 @@
 -- Intercepts areaJump() calls to redirect door transitions based on AP slot data
 
 local Shared = require("DRAP/Shared")
+local Activation = require("DRAP/Activation")
 
 local M = Shared.create_module("DoorRandomizer")
 
@@ -287,6 +288,32 @@ local function discover_ahlm_methods()
     return nil, "areaJump method not found"
 end
 
+--- Resolves areaJump without installing anything.
+---
+--- The frame loop is silent while no slot is connected, so in a vanilla run
+--- the hook never installs and the method is never found -- which is what the
+--- warp used to trip over. Debug mode is enough to resolve it, because
+--- resolving changes nothing on its own.
+local function ensure_area_jump_method()
+    if area_jump_method then return true end
+
+    local GUI = package.loaded["DRAP/GUI"]
+    local debug_on = GUI and GUI.is_debug and GUI.is_debug() or false
+    if not (Activation.is_active() or debug_on) then
+        M.log("Cannot warp: turn on Debug Mode first (no slot connected)")
+        return false
+    end
+
+    local method, err = discover_ahlm_methods()
+    if not method then
+        M.log("Cannot warp: " .. (err or "areaJump not found"))
+        return false
+    end
+    area_jump_method = method
+    discover_hit_data_fields()
+    return true
+end
+
 local function install_hook()
     if hook_installed then return true end
     if hook_install_attempted then return false end
@@ -387,6 +414,11 @@ local function install_hook()
 
                     M.last_transition = {
                         door_id = door_id,
+                        -- Stamped so consumers can tell a live door crossing
+                        -- from a stale record: this table persists until the
+                        -- NEXT jump, but the transition it describes is over
+                        -- within seconds.
+                        at = os.clock(),
                         vanilla = {
                             area_no = vanilla_area_no,
                             area_no_old = vanilla_area_no_old,
@@ -550,6 +582,29 @@ function M.get_redirects()
     return DOOR_REDIRECTS
 end
 
+--- Where a door really leads, for callers holding a layout's HIT_DATA.
+--- Reads mDoorNo off the hit data rather than guessing from the player's
+--- position, so the two North Plaza <-> Wonderland doorways resolve apart.
+--- Returns the vanilla name when the door has no redirect, so the result can
+--- be used unconditionally. Second return is the door id, for logging.
+function M.resolve_destination(level_path, vanilla_jump_name, hit_data_obj)
+    if not (level_path and vanilla_jump_name) then return vanilla_jump_name, nil end
+
+    local door_no = 0
+    if hit_data_obj and discover_hit_data_fields() then
+        local v = read_hit_data_field(hit_data_obj, "mDoorNo")
+        if v then door_no = v end
+    end
+
+    local door_id = tostring(level_path) .. "|" .. tostring(vanilla_jump_name)
+                    .. "|door" .. tostring(door_no)
+    local redirect = DOOR_REDIRECTS[door_id]
+    if redirect and redirect.target_area then
+        return tostring(redirect.target_area), door_id
+    end
+    return vanilla_jump_name, door_id
+end
+
 --- Returns whether the hook is installed
 function M.is_hook_installed()
     return hook_installed
@@ -644,6 +699,10 @@ local function scan_and_set_doors_disabled(disabled)
     return count
 end
 
+-- Debug area tracing. Off unless drap_trace_areas turns it on.
+local trace_areas = false
+local last_traced_area = nil
+
 local function update_vehicle_door_blocking()
     if not randomization_enabled or suppressed then return end
 
@@ -660,6 +719,11 @@ end
 ------------------------------------------------------------
 -- Existing HIT_DATA Borrowing (for warp)
 ------------------------------------------------------------
+
+-- The last HIT_DATA we managed to borrow, kept across areas. The Cave has
+-- none of its own, so without this the warp works in one direction only:
+-- you can get in and then cannot get out.
+local last_hit_data = nil
 
 --- Finds an existing HIT_DATA from the current area's door layout
 local function find_existing_hit_data()
@@ -687,7 +751,10 @@ local function find_existing_hit_data()
                             if li then
                                 local mHitData = Shared.get_field_value(li,
                                     {"mHitData", "<mHitData>k__BackingField"})
-                                if mHitData then return mHitData end
+                                if mHitData then
+                                    last_hit_data = mHitData
+                                    return mHitData
+                                end
                             end
                         end
                     end
@@ -699,12 +766,19 @@ local function find_existing_hit_data()
     return nil
 end
 
---- Simulates the s231->s136 door transition to warp the player to the Security Room
-function M.warp_to_security_room()
-    if not hook_installed or not area_jump_method then
-        M.log("Cannot warp: areaJump hook not installed")
-        return false
-    end
+--- Borrows a HIT_DATA from the current area, points it wherever we like and
+--- calls areaJump on it -- the same path a real door takes, so everything that
+--- normally runs on a transition still runs.
+---
+--- The destination position is used as given. There is no snap-to-ground, so a
+--- wrong one puts the player outside the world; this is a debug tool and a
+--- reload is the recovery.
+--- @param area_name string scene code, e.g. "s136"
+--- @param pos table|nil {x,y,z}; the area's origin when omitted
+--- @param angle table|nil {x,y,z}
+--- @param label string|nil name for the log line
+function M.warp_to(area_name, pos, angle, label)
+    if not ensure_area_jump_method() then return false end
 
     local ahlm = ahlm_mgr:get()
     if not ahlm then
@@ -712,36 +786,208 @@ function M.warp_to_security_room()
         return false
     end
 
-    local hit_data = find_existing_hit_data()
+    -- Built rather than borrowed. Borrowing rewrites a real door's
+    -- destination, which persists until that layout reloads -- and the Cave
+    -- has no doors to borrow in the first place. HIT_DATA is a managed class
+    -- with a vtable, so one can be made; the caller sets every field the jump
+    -- reads and the other 32 default harmlessly.
+    local hit_data, source = nil, nil
+    pcall(function() hit_data = sdk.create_instance(HIT_DATA_TYPE_NAME, true) end)
     if not hit_data then
-        M.log("Cannot warp: no existing HIT_DATA found in current area")
+        pcall(function() hit_data = sdk.create_instance(HIT_DATA_TYPE_NAME) end)
+    end
+    if hit_data then
+        pcall(function() hit_data:add_ref() end)
+        source = "a constructed HIT_DATA"
+    else
+        -- Only if that ever stops working. Both of these edit a live door.
+        hit_data, source = find_existing_hit_data(), "a door in this area"
+        if not hit_data and last_hit_data then
+            hit_data, source = last_hit_data, "a door in a previous area"
+        end
+    end
+    if not hit_data then
+        M.log("Cannot warp: no HIT_DATA could be made or borrowed")
         return false
     end
 
-    -- Configure the HIT_DATA to match the s231->s136 door0 transition
-    local mod_ok = modify_hit_data_destination(
-        hit_data,
-        "s136",                                      -- mAreaJumpName
-        { x = 153.19, y = 9.32, z = 216.92 },       -- mAreaJumpPos
-        { x = 0.0,    y = 0.93, z = 0.0 }            -- mAreaJumpAngle
-    )
+    pos = pos or { x = 0.0, y = 0.0, z = 0.0 }
+    angle = angle or { x = 0.0, y = 0.0, z = 0.0 }
 
-    if not mod_ok then
+    if not modify_hit_data_destination(hit_data, area_name, pos, angle) then
         M.log("Cannot warp: failed to configure HIT_DATA")
         return false
     end
-
-    -- Set door number
     pcall(function() hit_data:set_field("mDoorNo", 0) end)
 
     local ok, err = pcall(area_jump_method.call, area_jump_method, ahlm, hit_data)
     if ok then
-        M.log("Warped to Security Room via simulated door entry")
+        M.log(string.format(
+            "Warped to %s (%.2f, %.2f, %.2f) via simulated door entry, using %s",
+            label or area_name, pos.x, pos.y, pos.z, source))
         return true
-    else
-        M.log("Warp failed: " .. tostring(err))
+    end
+    M.log("Warp failed: " .. tostring(err))
+    return false
+end
+
+-- Spots inside the Overtime Cave, read with drap_player_pos() while standing
+-- in each. Not door anchors -- the Cave has no doors we can capture, and
+-- sb01/sb02 are joined by a load zone -- so these are player positions, which
+-- is what makes them safe to land on.
+--
+-- Reaching the Cave normally costs five queens, so without these the only way
+-- to test anything past Isabela is to play the whole chain again.
+local CAVE_SPOTS = {
+    entrance     = { "sb00", { x =  -3.600, y = -16.576, z =  -61.500 } },
+    middle       = { "sb01", { x =  -0.361, y = -47.451, z = -336.366 } },
+    exit         = { "sb02", { x =  -0.457, y = -50.073, z = -346.448 } },
+    humvee       = { "sb02", { x =  -0.799, y = -51.948, z = -419.491 } },
+    battleground = { "sb03", { x = 118.017, y = -50.136, z = -491.883 } },
+    brock        = { "sb03", { x = 150.200, y = -50.383, z = -482.700 } },
+}
+
+------------------------------------------------------------
+-- Warp targets
+------------------------------------------------------------
+
+-- Built by tools/build_door_table.py from the apworld's EMBEDDED_DOOR_DATA.
+-- The runtime only ever sees anchors through slot_data, which is empty with no
+-- slot connected -- and the picker is meant to work exactly there.
+local DOORS_JSON_PATH = "drdr_doors.json"
+local warp_targets = nil        -- scene code -> list of targets
+local warp_areas = nil          -- scene codes, in display order
+
+local function display_name(code)
+    local info = Shared.SCENE_INFO[code]
+    return info and info.name or code
+end
+
+--- Groups every door by the area it is in, labelled the way the GUI shows it.
+--- A door number only appears when an area has more than one door to the same
+--- place, which is the only time it disambiguates anything.
+local function build_warp_targets()
+    if warp_targets then return true end
+
+    local loaded = json.load_file(DOORS_JSON_PATH)
+    if type(loaded) ~= "table" or type(loaded.doors) ~= "table" then
+        M.log.warn("could not load " .. DOORS_JSON_PATH .. " -- no door list")
+        warp_targets, warp_areas = {}, {}
         return false
     end
+
+    local pair_count = {}
+    for _, d in ipairs(loaded.doors) do
+        local key = tostring(d.from) .. "|" .. tostring(d.to)
+        pair_count[key] = (pair_count[key] or 0) + 1
+    end
+
+    warp_targets = {}
+    for _, d in ipairs(loaded.doors) do
+        local label = display_name(d.from) .. " - " .. display_name(d.to) .. " Door"
+        if (pair_count[tostring(d.from) .. "|" .. tostring(d.to)] or 0) > 1 then
+            label = label .. " " .. tostring((d.door_no or 0) + 1)
+        end
+        local list = warp_targets[d.from]
+        if not list then list = {}; warp_targets[d.from] = list end
+        list[#list + 1] = {
+            label = label, to = d.to, door_no = d.door_no or 0,
+            pos = d.position, angle = d.angle,
+        }
+    end
+
+    -- The Cave has no doors, so its spots ride along as their own area.
+    for name, entry in pairs(CAVE_SPOTS) do
+        local code = entry[1]
+        local list = warp_targets[code]
+        if not list then list = {}; warp_targets[code] = list end
+        list[#list + 1] = {
+            label = display_name(code) .. " - " .. name, to = code,
+            door_no = 0, pos = entry[2], angle = nil,
+        }
+    end
+
+    warp_areas = {}
+    for code in pairs(warp_targets) do warp_areas[#warp_areas + 1] = code end
+    table.sort(warp_areas, function(a, b) return display_name(a) < display_name(b) end)
+    for _, list in pairs(warp_targets) do
+        table.sort(list, function(x, y) return x.label < y.label end)
+    end
+    return true
+end
+
+--- @return table scene codes in display order, table code -> targets
+function M.get_warp_targets()
+    build_warp_targets()
+    return warp_areas, warp_targets
+end
+
+function M.area_display_name(code) return display_name(code) end
+
+--- @param spot string one of CAVE_SPOTS; lists them when omitted or unknown
+function M.warp_to_cave(spot)
+    local entry = CAVE_SPOTS[tostring(spot or "")]
+    if not entry then
+        local names = {}
+        for k in pairs(CAVE_SPOTS) do names[#names + 1] = k end
+        table.sort(names)
+        M.log("usage: drap_warp_cave(\"" .. table.concat(names, "\" | \"") .. "\")")
+        return false
+    end
+    local info = Shared.SCENE_INFO[entry[1]]
+    return M.warp_to(entry[1], entry[2], nil,
+        (info and info.name or entry[1]) .. " / " .. spot)
+end
+
+--- The s231->s136 door0 transition, kept as a named shortcut.
+function M.warp_to_security_room()
+    return M.warp_to("s136",
+        { x = 153.19, y = 9.32, z = 216.92 },
+        { x = 0.0,    y = 0.93, z = 0.0 },
+        "Security Room")
+end
+
+
+
+
+------------------------------------------------------------
+-- Console
+------------------------------------------------------------
+
+--- Use drap_player_pos() to read a destination before warping to it -- that
+--- is the capture that mapped the Maintenance Tunnel doorways, and it is
+--- proven where this warp is not.
+---
+--- drap_warp("sb00")                 area origin
+--- drap_warp("s136", 153.19, 9.32, 216.92)
+_G.drap_warp = function(area, x, y, z, ay)
+    if type(area) ~= "string" then
+        M.log("usage: drap_warp(\"s136\" [, x, y, z [, angleY]])")
+        return false
+    end
+    local pos = (x and y and z) and { x = x, y = y, z = z } or nil
+    local angle = ay and { x = 0.0, y = ay, z = 0.0 } or nil
+    return M.warp_to(area, pos, angle)
+end
+
+
+--- The way out. Warping to an area origin can drop the player through the
+--- floor, and this leaves without reloading -- provided the area we are
+--- standing in has a HIT_DATA to borrow. If it does not, nothing can warp out
+--- of it and a reload is the only recovery.
+_G.drap_warp_home = function() return M.warp_to_security_room() end
+
+--- drap_warp_cave("humvee") -- straight to the tank fight trigger
+_G.drap_warp_cave = function(spot) return M.warp_to_cave(spot) end
+
+--- Logs the area and position on every area change. Left on, walking or
+--- warping through the Cave records all five scenes without anyone having to
+--- remember to type anything -- which is how the codes got lost last time.
+_G.drap_trace_areas = function(on)
+    trace_areas = (on ~= false)
+    M.log("area tracing " .. (trace_areas and "ON" or "OFF"))
+    if trace_areas then last_traced_area = nil end
+    return trace_areas
 end
 
 ------------------------------------------------------------
@@ -758,6 +1004,21 @@ function M.on_frame()
     end
 
     update_vehicle_door_blocking()
+
+    if trace_areas then
+        local idx = get_current_area_info()
+        if idx and idx ~= last_traced_area then
+            last_traced_area = idx
+            -- The capture that mapped the Maintenance Tunnel doorways, rather
+            -- than a second one that could disagree with it. Door anchors come
+            -- from drap_door_capture.lua, which records them as they are
+            -- walked -- the only way to get one out of the engine.
+            local overlay = package.loaded["DRAP/effects/DoorPromptOverlay"]
+            if overlay and overlay.capture_position then
+                pcall(overlay.capture_position)
+            end
+        end
+    end
 end
 
 ------------------------------------------------------------

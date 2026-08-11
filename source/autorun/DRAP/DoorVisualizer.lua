@@ -87,7 +87,7 @@ local AREA_COLORS = {
     s300 = "#AA00FF",  -- Wonderland Plaza
     s230 = "#D500F9",  -- Warehouse
     s400 = "#FF4081",  -- North Plaza
-    s601 = "#8D6E63",  -- Butcher
+    s601 = "#8D6E63",  -- Meat Processing
     s600 = "#78909C",  -- Maintenance Tunnel
     s500 = "#FFFFFF",  -- Seon's Food and Stuff
     s501 = "#CE93D8",  -- Crislip's
@@ -100,7 +100,7 @@ local AREA_SHORT_NAMES = {
     s900 = "Al Fresca",     sa00 = "Food Court",    s300 = "Wonderland",
     s400 = "North Plaza",   s700 = "Leisure Pk",    s501 = "Crislip's",
     s503 = "Colby's",       s401 = "Carlito's",     s600 = "Tunnels",
-    s500 = "Seon's",        s601 = "Butcher",
+    s500 = "Seon's",        s601 = "Meat Processing",
 }
 
 -- Pixel positions on Mall.png for each door's source endpoint.
@@ -156,6 +156,11 @@ local DOOR_MAP_POSITIONS = {
     ["SCN_s400|s300|door1"] = {262.1, 233.5},
     ["SCN_s300|s400|door1"] = {262.7, 249.2},
     ["SCN_s300|sa00|door0"] = {204.2, 497.4},
+    ["SCN_s300|s600|door0"] = {182.8, 334.7},
+    ["SCN_s600|s300|door0"] = {193.2, 325.3},
+    ["SCN_s100|s600|door0"] = {545.3, 604.6},
+    ["SCN_s600|s100|door0"] = {534.7, 595.4},
+    ["SCN_sa00|s900|door0"] = {257.6, 568.5},
 }
 
 -- Vanilla door definitions: every passable door in the game with its
@@ -212,6 +217,11 @@ local VANILLA_DOORS = {
     ["SCN_sa00|s300|door0"] = {from_area = "sa00", to_area = "s300", door_no = 0},
     ["SCN_sa00|s600|door0"] = {from_area = "sa00", to_area = "s600", door_no = 0},
     ["SCN_sa00|s700|door0"] = {from_area = "sa00", to_area = "s700", door_no = 0},
+    ["SCN_s300|s600|door0"] = {from_area = "s300", to_area = "s600", door_no = 0},
+    ["SCN_s600|s300|door0"] = {from_area = "s600", to_area = "s300", door_no = 0},
+    ["SCN_s100|s600|door0"] = {from_area = "s100", to_area = "s600", door_no = 0},
+    ["SCN_s600|s100|door0"] = {from_area = "s600", to_area = "s100", door_no = 0},
+    ["SCN_sa00|s900|door0"] = {from_area = "sa00", to_area = "s900", door_no = 0},
 }
 
 ------------------------------------------------------------
@@ -1331,10 +1341,83 @@ end
 local last_generate_status = nil  -- nil, "success", or error message
 local last_generate_time = 0
 
+-- Warp picker state. Index into the area list, then into that area's doors.
+local warp_area_idx = 1
+local warp_door_idx = 1
+local warp_status = nil
+local warp_status_time = 0
+
+--- Every door in the game, choosable by the area it is in and which door it
+--- is. Debug only, and deliberately above the Door Randomizer check: warping
+--- is for testing a vanilla or unconnected run as much as a randomized one.
+local function draw_warp_picker(DoorRandomizer)
+    if not imgui.tree_node("Warp to a Door") then return end
+
+    local areas, targets = DoorRandomizer.get_warp_targets()
+    if not areas or #areas == 0 then
+        imgui.text_colored("No door table loaded (drdr_doors.json missing).",
+            0xFFFF8800)
+        imgui.tree_pop()
+        return
+    end
+
+    if warp_area_idx > #areas then warp_area_idx = 1 end
+
+    local area_labels = {}
+    for i, code in ipairs(areas) do
+        area_labels[i] = string.format("%s (%s)",
+            DoorRandomizer.area_display_name(code), code)
+    end
+
+    local changed, picked = imgui.combo("Area", warp_area_idx, area_labels)
+    if changed then
+        warp_area_idx = picked
+        warp_door_idx = 1
+    end
+
+    local list = targets[areas[warp_area_idx]] or {}
+    if #list == 0 then
+        imgui.text("No doors recorded in this area.")
+        imgui.tree_pop()
+        return
+    end
+    if warp_door_idx > #list then warp_door_idx = 1 end
+
+    local door_labels = {}
+    for i, t in ipairs(list) do door_labels[i] = t.label end
+    local dchanged, dpicked = imgui.combo("Door", warp_door_idx, door_labels)
+    if dchanged then warp_door_idx = dpicked end
+
+    local target = list[warp_door_idx]
+    if target and target.pos then
+        imgui.text(string.format("Lands at (%.2f, %.2f, %.2f) in %s",
+            target.pos.x or 0, target.pos.y or 0, target.pos.z or 0,
+            tostring(target.to)))
+    end
+
+    if imgui.button("Warp Here") and target then
+        local ok = DoorRandomizer.warp_to(target.to, target.pos, target.angle,
+                                          target.label)
+        warp_status = ok and ("Warped to " .. target.label)
+                        or "Warp failed -- see the log"
+        warp_status_time = os.clock()
+    end
+
+    if warp_status and os.clock() - warp_status_time < 5 then
+        imgui.text_colored(warp_status,
+            warp_status:find("failed") and 0xFFFF0000 or 0xFF00FF00)
+    end
+
+    imgui.tree_pop()
+end
+
 function M.draw_tab_content(debug)
     local DoorRandomizer = require("DRAP/DoorRandomizer")
 
     if debug then
+        draw_warp_picker(DoorRandomizer)
+        imgui.spacing()
+
         imgui.text_colored(
             DoorRandomizer.is_enabled() and "Door Rando: ON" or "Door Rando: OFF",
             DoorRandomizer.is_enabled() and 0xFF00FF00 or 0xFFFF0000)

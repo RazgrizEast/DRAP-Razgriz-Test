@@ -60,6 +60,19 @@ function M.areas()
     return (data and data.areas) or {}
 end
 
+function M.split_areas()
+    ensure_loaded()
+    return (data and data.split_areas) or {}
+end
+
+-- Area code -> list of codes one door away. Used to answer "can the player
+-- get there yet" against the live door locks, which is what keeps a scoop
+-- from starting behind a door they cannot open.
+function M.area_graph()
+    ensure_loaded()
+    return (data and data.area_graph) or {}
+end
+
 function M.time_keys()
     ensure_loaded()
     return (data and data.time_keys) or {}
@@ -103,6 +116,14 @@ end
 function M.completion_flags()
     ensure_loaded()
     return (data and data.completion_flags) or {}
+end
+
+--- The nine Overtime suppressant objects, straight from the game's own
+--- EventSetCookingEquipment.CookInfos: class_name is the scene object,
+--- get_flag is set when the player takes it, show_flag when it is delivered.
+function M.overtime_items()
+    ensure_loaded()
+    return (data and data.overtime_items) or {}
 end
 
 -- Main-case objective-pin indices (case -> scq_no/pos_tbl), the

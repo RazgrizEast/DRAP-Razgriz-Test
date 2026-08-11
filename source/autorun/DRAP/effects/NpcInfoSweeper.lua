@@ -154,11 +154,25 @@ local function read_entry(info)
     return entry
 end
 
+-- Burt Thompson is stype 0, so a record the engine allocated and never filled
+-- in decodes as him: zero stype, zero state, zero area, zero hp, dead. Naming
+-- him there has cost real investigation time -- these are blank records, and
+-- whatever creates them has nothing to do with Burt.
+local function is_blank_record(e)
+    return (e.stype or -1) == 0 and (e.state or -1) == 0
+        and (e.area or -1) == 0 and (e.vital or -1) == 0 and e.is_dead
+end
+
+local function name_of(entry)
+    if is_blank_record(entry) then return "BLANK record, not a survivor" end
+    return stype_to_name[entry.stype] or "?"
+end
+
 local function describe(entry, owning_scoop)
     return string.format(
         "stype=%s (%s) state=%s hp=%s area=%s isDead=%s%s",
         tostring(entry.stype),
-        stype_to_name[entry.stype] or "?",
+        name_of(entry),
         tostring(entry.state),
         tostring(entry.vital),
         tostring(entry.area),
@@ -252,8 +266,20 @@ function M.sweep(reason)
     for stype, n in pairs(stype_counts) do
         if n > 1 and stype < TRAP_POOL_MIN_STYPE then
             anomalies = anomalies + 1
-            M.log(string.format("duplicate records: stype=%d (%s) x%d",
-                stype, stype_to_name[stype] or "?", n))
+            local blanks = 0
+            for _, e in ipairs(by_stype[stype] or {}) do
+                if is_blank_record(e) then blanks = blanks + 1 end
+            end
+            if blanks == n then
+                M.log(string.format(
+                    "%d BLANK records (stype=0, never filled in) -- not %s;"
+                        .. " these are allocated-and-abandoned NpcBaseInfo",
+                    n, stype_to_name[0] or "stype 0"))
+            else
+                M.log(string.format("duplicate records: stype=%d (%s) x%d%s",
+                    stype, stype_to_name[stype] or "?", n,
+                    blanks > 0 and string.format(" (%d blank)", blanks) or ""))
+            end
         end
     end
 
@@ -291,8 +317,11 @@ function M.sweep(reason)
     end
 
     removed_this_session = removed_this_session + removed
-    last_sweep_report = string.format("%s: %d anomalies, %d removed (mode=%s)",
-        reason or "?", anomalies, removed, mode)
+    -- Area goes in the line: a sweep that ran somewhere unexpected is the
+    -- difference between a real anomaly and a glance taken mid-load.
+    last_sweep_report = string.format(
+        "%s: %d anomalies, %d removed (mode=%s, area=%s)",
+        reason or "?", anomalies, removed, mode, tostring(last_area_index))
     if removed > 0 or anomalies > 0 then
         M.log("sweep " .. last_sweep_report)
     end
@@ -461,6 +490,19 @@ function M.on_frame()
     if not ok or area == nil then return end
     area = tonumber(area)
     if area == nil then return end
+
+    -- A negative index is the engine telling us it does not know where the
+    -- player is yet -- it reads -1 through the save-load window, before the
+    -- area resolves. Sweeping there judges NpcBaseInfo records the engine is
+    -- still deserializing, and the verdicts go into the census, which is
+    -- persisted. So a load-window glance gets written down as fact.
+    --
+    -- The party restore already defers five seconds for exactly this reason
+    -- ("manager and flag reads are unreliable inside the load window"); the
+    -- sweep never got the same treatment. Seen 2026-08-06: "Area changed to
+    -- SCN_s200 (index -1)", a sweep 0.5s later reporting blank records, and
+    -- the real area arriving 2s after that.
+    if area < 0 then return end
 
     if last_area_index == nil then
         -- First frame in gameplay (fresh load): sweep once so an

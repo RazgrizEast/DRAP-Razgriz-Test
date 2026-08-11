@@ -1328,11 +1328,73 @@ end
 -- Module Load
 ------------------------------------------------------------
 
+------------------------------------------------------------
+-- Name search
+--
+-- The names come from getEventNameDefine, which the extractor above already
+-- uses -- what was missing was a way to ask "which flags mention X". Finding
+-- the flags behind a repeatable event (the convicts spawn up to three times;
+-- DRAP only knows 807/2698) means reading the names rather than guessing ids.
+------------------------------------------------------------
+
+--- Print every flag whose engine name contains `text` (case-insensitive),
+--- with its current state. Range defaults to the whole flag space.
+_G.eflag_find = function(text, start_id, end_id)
+    if type(text) ~= "string" or text == "" then
+        M.log("eflag_find(\"text\" [, start, end]) -- searches engine flag names")
+        return
+    end
+    start_id = tonumber(start_id) or 0
+    end_id = tonumber(end_id) or 4200
+    local needle = text:lower()
+    local names = M.extract_names(start_id, end_id)
+    local hits = 0
+    for flag_id = start_id, end_id do
+        local name = names[flag_id]
+        if name and tostring(name):lower():find(needle, 1, true) then
+            hits = hits + 1
+            M.log(string.format("  %5d  %-52s  %s",
+                flag_id, tostring(name),
+                tostring(M.check_flag(flag_id))))
+        end
+    end
+    M.log(string.format("eflag_find(%q): %d flag(s) in %d-%d",
+        text, hits, start_id, end_id))
+end
+
+--- Dump SCQManager's own scoop/flag pairing tables. Never read before, and
+--- the only native source for "which flags belong to this scoop" -- our
+--- SCOOP_DATA is hand-curated, so this is also how to check it.
+_G.eflag_scq_tables = function()
+    local scq = sdk.get_managed_singleton("app.solid.gamemastering.SCQManager")
+    if not scq then M.log("SCQManager unavailable"); return end
+    for _, field in ipairs({ "PairFlag", "RelatedEndTbl", "QueEndFlag" }) do
+        local obj
+        pcall(function() obj = scq:get_field(field) end)
+        if not obj then
+            M.log(string.format("  %s: unreadable", field))
+        else
+            local n
+            pcall(function() n = obj:call("get_Length") end)
+            if n == nil then pcall(function() n = obj:call("get_Count") end) end
+            M.log(string.format("  %s: %s entries", field, tostring(n)))
+            -- 2D arrays need their rank before the layout means anything.
+            local td = obj:get_type_definition()
+            M.log(string.format("    type=%s", td and td:get_full_name() or "?"))
+            for i = 0, math.min(tonumber(n) or 0, 60) - 1 do
+                local v
+                pcall(function() v = obj:call("get_Item", i) end)
+                if v ~= nil then M.log(string.format("    [%d] %s", i, tostring(v))) end
+            end
+        end
+    end
+end
+
 M.load_discovered()
 dev_log("EventFlagExplorer v3 loaded")
 dev_log("Commands: eflag_check(id), eflag_on(id), eflag_off(id), eflag_scan(s,e)")
 dev_log("          eflag_name(id), eflag_explore(), eflag_extract(s,e), eflag_dump()")
-dev_log("          eflag_gui()")
+dev_log("          eflag_gui(), eflag_find(\"text\"), eflag_scq_tables()")
 dev_log("Recording: eflag_rec(mission), eflag_rec_stop(), eflag_rec_mission(name)")
 dev_log("           eflag_rec_save(), eflag_rec_load(), eflag_rec_show()")
 

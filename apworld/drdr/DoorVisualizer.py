@@ -39,7 +39,7 @@ AREA_COLORS = {
     "s300": "#AA00FF",  # Wonderland Plaza   — Violet
     "s230": "#D500F9",  # Warehouse    — Purple
     "s400": "#FF4081",  # North Plaza        — Hot Pink
-    "s601": "#8D6E63",  # Butcher            — Brown
+    "s601": "#8D6E63",  # Meat Processing    — Brown
     "s600": "#78909C",  # Maintenance Tunnel — Blue Gray
     "s500": "#FFFFFF",  # Seon's Food and Stuff      — White
     "s501": "#CE93D8",  # Crislip's          — Lavender
@@ -53,9 +53,11 @@ DOOR_MAP_POSITIONS = {
     "SCN_s900|s600|door0": (354.2, 582.1),
     "SCN_s900|sa00|door0": (264.4, 570.1),
     "SCN_sa00|s300|door0": (207.2, 511.6),
+    "SCN_sa00|s900|door0": (257.6, 568.5),
     "SCN_sa00|s600|door0": (203.2, 526.2),
     "SCN_sa00|s700|door0": (253.1, 518.9),
     "SCN_s100|s136|door0": (712.4, 731.4),
+    "SCN_s100|s600|door0": (545.3, 604.6),
     "SCN_s100|s200|door0": (545.9, 500.1),
     "SCN_s100|s900|door0": (507.7, 512.3),
     "SCN_s135|s136|door0": (754.1, 660.3),
@@ -65,7 +67,9 @@ DOOR_MAP_POSITIONS = {
     "SCN_s700|s600|door0": (121.3, 149.5),
     "SCN_s700|sa00|door0": (260.5, 510.0),
     "SCN_s503|s200|door0": (524.3, 203.6),
+    "SCN_s600|s100|door0": (534.7, 595.4),
     "SCN_s600|s200|door0": (649.0, 306.6),
+    "SCN_s600|s300|door0": (193.2, 325.3),
     "SCN_s600|s500|door0": (57.9, 23.1),
     "SCN_s600|s601|door0": (98.8, 92.2),
     "SCN_s600|s700|door0": (133.6, 149.9),
@@ -99,6 +103,7 @@ DOOR_MAP_POSITIONS = {
     "SCN_s400|s300|door0": (131.9, 197.0),
     "SCN_s400|s300|door1": (262.1, 233.5),
     "SCN_s300|s400|door1": (262.7, 249.2),
+    "SCN_s300|s600|door0": (182.8, 334.7),
     "SCN_s300|sa00|door0": (204.2, 497.4),
 }
 
@@ -126,7 +131,7 @@ def get_short_name(area_code: str) -> str:
         "s401": "Carlito's Hideout",
         "s600": "Tunnels",
         "s500": "Grocery",
-        "s601": "Butcher",
+        "s601": "Meat Processing",
     }
     return names.get(area_code, area_code)
 

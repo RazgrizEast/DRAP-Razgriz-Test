@@ -45,13 +45,12 @@ AREA_NAMES = {
     "s401": "Carlito's Hideout",
     "s600": "Maintenance Tunnel",
     "s500": "Seon's Food and Stuff",
-    "s601": "Butcher",
+    "s601": "Meat Processing Area",
 }
 
 PROTECTED_AREAS = {
     "s135",  # Heliport
     "s136",  # Security Room
-    "s601",  # Butcher
 }
 
 DEAD_END_AREAS = {
@@ -73,7 +72,7 @@ DEAD_END_AREAS = {
 # Only the Entrance Plaza <-> Security Room pair is a pure cutscene in vanilla
 # — the game transports the player there once via cinematic and it's never
 # walkable again. Heliport <-> Security Room IS walkable (door-randomizer
-# precollects the Heliport key, which unlocks that door), so it stays in the
+# precollects the Heliport Key, which unlocks that door), so it stays in the
 # reachability graph.
 #
 # Under ScoopSanity, the Entrance Plaza <-> Security Room pair becomes
@@ -413,13 +412,21 @@ class DoorRandomizer:
             if not self.can_escape_all_areas(graph):
                 continue
 
-            # Verify bidirectionality
+            # Verify bidirectionality.
+            #
+            # Protected areas are exempt because their edges are not shuffled
+            # -- except the ones the caller opted in. ScoopSanity puts the
+            # Security Room <-> Entrance Plaza pair into the pool, and it used
+            # to be shuffled without ever being checked here, so one direction
+            # could be redirected while the other stayed vanilla. That left a
+            # one-way trip in roughly one paired seed in ten.
             is_bidirectional = True
             for from_area, to_areas in graph.items():
-                if from_area in PROTECTED_AREAS:
-                    continue
                 for to_area in to_areas:
-                    if to_area in PROTECTED_AREAS:
+                    opted_in = ((from_area, to_area) in self.scoop_sanity_unlocked_edges
+                                or (to_area, from_area) in self.scoop_sanity_unlocked_edges)
+                    if not opted_in and (from_area in PROTECTED_AREAS
+                                         or to_area in PROTECTED_AREAS):
                         continue
                     if from_area not in graph.get(to_area, set()):
                         is_bidirectional = False
@@ -532,6 +539,9 @@ EMBEDDED_DOOR_DATA = {
     "SCN_s100|s200|door0": {"from_area_code": "s100", "to_area_code": "s200",
                             "position": {"x": 145.53, "y": 0.0, "z": 84.66}, "angle": {"x": 0.0, "y": 2.42, "z": 0.0},
                             "door_no": 0},
+    "SCN_s100|s600|door0": {"from_area_code": "s100", "to_area_code": "s600",
+                           "position": {"x": 122.24, "y": 0.0, "z": 183.08}, "angle": {"x": 0.0, "y": 1.47, "z": 0.0},
+                           "door_no": 0},
     "SCN_s100|s900|door0": {"from_area_code": "s100", "to_area_code": "s900",
                             "position": {"x": 49.84, "y": 0.0, "z": 119.72}, "angle": {"x": 0.0, "y": -1.52, "z": 0.0},
                             "door_no": 0},
@@ -586,6 +596,9 @@ EMBEDDED_DOOR_DATA = {
     "SCN_s300|s400|door1": {"from_area_code": "s300", "to_area_code": "s400",
                             "position": {"x": -85.04, "y": 5.0, "z": -84.02}, "angle": {"x": 0.0, "y": 3.0, "z": 0.0},
                             "door_no": 1},
+    "SCN_s300|s600|door0": {"from_area_code": "s300", "to_area_code": "s600",
+                           "position": {"x": -147.7, "y": 0.0, "z": -22.0}, "angle": {"x": 0.0, "y": -1.5, "z": 0.0},
+                           "door_no": 0},
     "SCN_s300|sa00|door0": {"from_area_code": "s300", "to_area_code": "sa00",
                             "position": {"x": -130.65, "y": 0.0, "z": 107.06}, "angle": {"x": 0.0, "y": 0.19, "z": 0.0},
                             "door_no": 0},
@@ -613,9 +626,15 @@ EMBEDDED_DOOR_DATA = {
     "SCN_s503|s200|door0": {"from_area_code": "s503", "to_area_code": "s200",
                             "position": {"x": 106.1, "y": 0.0, "z": -66.28}, "angle": {"x": 0.0, "y": 0.07, "z": 0.0},
                             "door_no": 0},
+    "SCN_s600|s100|door0": {"from_area_code": "s600", "to_area_code": "s100",
+                           "position": {"x": 117.0, "y": 0.0, "z": 182.5}, "angle": {"x": 0.0, "y": -1.45, "z": 0.0},
+                           "door_no": 0},
     "SCN_s600|s200|door0": {"from_area_code": "s600", "to_area_code": "s200",
                             "position": {"x": 198.7, "y": 0.0, "z": -24.3}, "angle": {"x": 0.0, "y": 0.0, "z": 0.0},
                             "door_no": 0},
+    "SCN_s600|s300|door0": {"from_area_code": "s600", "to_area_code": "s300",
+                           "position": {"x": -142.5, "y": 0.0, "z": -22.0}, "angle": {"x": 0.0, "y": 0.62, "z": 0.0},
+                           "door_no": 0},
     "SCN_s600|s601|door0": {"from_area_code": "s600", "to_area_code": "s601",
                             "position": {"x": -243.06, "y": -3.0, "z": -262.9},
                             "angle": {"x": 0.0, "y": -2.74, "z": 0.0}, "door_no": 0},
@@ -674,6 +693,9 @@ EMBEDDED_DOOR_DATA = {
                             "position": {"x": -230.23, "y": 5.0, "z": -244.97},
                             "angle": {"x": 0.0, "y": -0.17, "z": 0.0},
                             "door_no": 0},
+    "SCN_sa00|s900|door0": {"from_area_code": "sa00", "to_area_code": "s900",
+                           "position": {"x": -65.0, "y": 0.0, "z": 161.5}, "angle": {"x": 0.0, "y": 1.57, "z": 0.0},
+                           "door_no": 0},
 }
 
 DOOR_MODE_CHAOS = 0
@@ -745,7 +767,7 @@ def generate_door_map_html(redirects: Dict[str, dict], title: str = "Door Random
         "s200": "Paradise", "s100": "Entrance", "s900": "Al Fresca", "sa00": "Food Court",
         "s300": "Wonderland", "s400": "North Plaza", "s700": "Leisure Pk", "s501": "Crislip's",
         "s503": "Colby's", "s401": "Carlito's Hideout", "s600": "Tunnels", "s500": "Grocery",
-        "s601": "Butcher",
+        "s601": "Meat Processing Area",
     }
 
     all_areas = set()

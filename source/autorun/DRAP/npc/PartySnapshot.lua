@@ -33,6 +33,24 @@ local SIGNALS = { "join_count", "pp_total", "rescue_num", "level", "case" }
 M.SIGNALS = SIGNALS
 
 ------------------------------------------------------------
+-- Story NPCs who follow the player but are not survivors. The game scripts
+-- when they arrive and when they leave, so putting one back is always wrong --
+-- and none of the guards above can catch it: they have no "Rescue" location,
+-- so the rescued-in-this-save test that holds ordinary survivors back has
+-- nothing to look at.
+--
+-- Seen 2026-08-06: reloading after her escort respawned Isabela into the party
+-- and she would not despawn. She is escorted three separate times (A Promise
+-- to Isabela, Hideout, Transporting Isabela), so every one of those is a
+-- chance to hit it.
+--
+-- Filtered on the way in AND on the way out, so a snapshot already written
+-- with one of them in it stays harmless.
+M.NEVER_RESTORE = {
+    [34] = "Isabela Keyes",
+}
+
+------------------------------------------------------------
 -- Capture
 ------------------------------------------------------------
 
@@ -41,12 +59,13 @@ M.SIGNALS = SIGNALS
 function M.capture(party, signals)
     local members, sig = {}, {}
     for _, m in ipairs(party or {}) do
-        if type(m) == "table" and tonumber(m.stype) then
+        if type(m) == "table" and tonumber(m.stype)
+                and not M.NEVER_RESTORE[tonumber(m.stype)] then
             table.insert(members, {
                 stype = tonumber(m.stype),
                 area = tonumber(m.area),
             })
-        elseif tonumber(m) then
+        elseif tonumber(m) and not M.NEVER_RESTORE[tonumber(m)] then
             table.insert(members, { stype = tonumber(m) })
         end
     end
@@ -131,7 +150,9 @@ end
 function M.to_restore(snapshot, is_present, is_rescued)
     local out, skipped = {}, {}
     for _, m in ipairs((snapshot or {}).party or {}) do
-        if is_present and is_present(m.stype) then
+        if M.NEVER_RESTORE[m.stype] then
+            skipped[m.stype] = "story NPC, the game owns when they follow"
+        elseif is_present and is_present(m.stype) then
             skipped[m.stype] = "already present"
         elseif is_rescued and is_rescued(m.stype) then
             skipped[m.stype] = "already rescued in this save"

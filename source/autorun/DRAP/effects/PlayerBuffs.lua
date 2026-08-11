@@ -146,6 +146,49 @@ local _frame_cb_installed = false
 local god_mode = false
 local god_saved_speed = nil
 local god_last_tick = 0
+
+-- Books that make a test run quick: unarmed damage, both camera upgrades, and
+-- weapons that never break. Looked up by name so the numbers stay in one place.
+local GOD_BOOKS = {
+    "Book [Martial Arts]",
+    "Book [Camera 1]",
+    "Book [Camera 2]",
+    "Book [Infinite Durability]",
+}
+-- Only the ones God Mode granted are revoked on the way out -- a book the slot
+-- legitimately sent has to survive.
+local god_granted_books = {}
+
+local function god_book_numbers()
+    local SharedData = require("DRAP/SharedData")
+    local wanted, out = {}, {}
+    for _, n in ipairs(GOD_BOOKS) do wanted[n] = true end
+    for _, def in ipairs(SharedData.items()) do
+        if def.name and def.item_number and wanted[def.name] then
+            out[#out + 1] = { name = def.name, item_no = def.item_number }
+        end
+    end
+    return out
+end
+
+local function god_apply_books(on)
+    local books = AP and AP.effects and AP.effects.BookSkills
+    if not books then return end
+    if on then
+        for _, b in ipairs(god_book_numbers()) do
+            -- Leave anything already owned alone, so it is not revoked later.
+            if not books.is_granted(b.item_no) then
+                books.grant(b.item_no)
+                god_granted_books[b.item_no] = true
+            end
+        end
+    else
+        for item_no in pairs(god_granted_books) do
+            books.revoke(item_no)
+        end
+        god_granted_books = {}
+    end
+end
 local GOD_TICK_SECONDS = 2.0
 local GOD_SPEED = { 5.0, 5.0, 5.0 }
 local GOD_RUN_LEVEL = 10   -- acceleration: reach top speed instantly
@@ -192,15 +235,28 @@ function M.set_god_mode(enabled)
         _set_invincible(true)
         _set_god_run(GOD_RUN_LEVEL)
         god_last_tick = 0   -- fire the buff tick immediately
-        log("GOD MODE ON (Invincible + NoDamage[grab immunity] + speed "
-            .. tostring(GOD_SPEED[1]) .. ")")
+        god_apply_books(true)
+        if AP and AP.ItemSpawner and AP.ItemSpawner.set_show_all_items then
+            AP.ItemSpawner.set_show_all_items(true)
+        end
+        local n = 0
+        for _ in pairs(god_granted_books) do n = n + 1 end
+        log(string.format(
+            "GOD MODE ON (Invincible + NoDamage[grab immunity] + speed %s"
+                .. " + %d book(s) + every item spawnable)",
+            tostring(GOD_SPEED[1]), n))
     else
         _set_invincible(false)
         _set_god_run(nil)
+        god_apply_books(false)
+        if AP and AP.ItemSpawner and AP.ItemSpawner.set_show_all_items then
+            AP.ItemSpawner.set_show_all_items(false)
+        end
         _set_speed_table(god_saved_speed or VANILLA_SPEED_TABLE)
         _refresh_psm_ui()
         -- Let the juice timers lapse on their own (short refresh window).
-        log("GOD MODE OFF (invincibility, grab immunity, and speed restored)")
+        log("GOD MODE OFF (invincibility, grab immunity, speed, books and the"
+            .. " item list restored)")
     end
 end
 
@@ -493,13 +549,41 @@ function M.register()
         { name = "Slow Trap",          fn = M.slow_trap },
         { name = "Damage Player Trap", fn = M.player_damage },
     }
+    -- Traps go through TrapBank instead of firing on arrival: one that lands
+    -- at the title screen or mid-load used to be lost outright. Banked ones
+    -- are paid out one at a time once the player is actually in the game.
+    -- Buffs keep firing immediately -- they are a gift, and holding one back
+    -- to drip-feed it later would just be annoying.
+    local TrapBank = require("DRAP/TrapBank")
+    local TRAPS = {
+        ["Stomach Ache Trap"]  = true,
+        ["Zombait Trap"]       = true,
+        ["Slow Trap"]          = true,
+        ["Damage Player Trap"] = true,
+    }
+    local trap_n = 0
     for _, item in ipairs(items) do
-        ItemEffects.register(item.name, {
-            on_replay = "skip",
-            apply = function(ctx) item.fn() end,
-        })
+        if TRAPS[item.name] then
+            trap_n = trap_n + 1
+            TrapBank.register(item.name, { fire = function() item.fn() end })
+            -- Registered with ItemEffects too, purely so the arrival is
+            -- logged where every other item's is. It does no work.
+            ItemEffects.register(item.name, {
+                on_replay = "skip",
+                apply = function(ctx)
+                    log(string.format("%s banked (%d owed)", item.name,
+                        TrapBank.banked(item.name)))
+                end,
+            })
+        else
+            ItemEffects.register(item.name, {
+                on_replay = "skip",
+                apply = function(ctx) item.fn() end,
+            })
+        end
     end
-    log(string.format("PlayerBuffs registered (%d items)", #items))
+    log(string.format("PlayerBuffs registered (%d items, %d via TrapBank)",
+        #items, trap_n))
 end
 
 _G.drap_god = function(on)

@@ -50,6 +50,22 @@ class DoorRandomizerMode(Choice):
     default = 1
 
 
+class DoorLocks(Toggle):
+    """
+    When enabled (and Door Randomizer is on), the area keys still lock doors.
+    Normally every key is given to you at the start when doors are randomized,
+    because the logic tracks the vanilla layout rather than the shuffled one.
+    With this on, the logic follows the doors where they actually go and a door
+    is locked by the key for wherever it now leads.
+
+    Paired mode only, and the per-door Split Keys option is not supported yet.
+
+    Has no effect if Door Randomizer is disabled.
+    """
+    display_name = "Door Locks"
+    default = False
+
+
 class RandomizeRooftopServiceHallwayDoors(Toggle):
     """
     When enabled (and Door Randomizer is on), the doors between Rooftop and
@@ -125,6 +141,37 @@ class ScoopSanity(Toggle):
     """
     display_name = "ScoopSanity"
     default = True
+
+
+class RandomizeScoopOrder(DefaultOnToggle):
+    """
+    When enabled (the default), the main scoop chain is shuffled and you
+    receive the scoops in that new order.
+
+    When disabled, the chain keeps its vanilla order, starting with Backup for
+    Brad. You still have to receive each scoop as an item before you can do it,
+    and the level requirements per position still apply, so the run is paced
+    the same as a randomized one.
+
+    Has no effect if ScoopSanity is disabled.
+    """
+    display_name = "Randomize Scoop Order"
+
+
+class MainScoopsAnyOrder(Toggle):
+    """
+    When enabled, any main scoop you have received can be started as soon as
+    you can reach it, instead of waiting for its turn in the chain. Activate
+    the one you want from the Scoops window; only one runs at a time.
+
+    The per-position level requirements do not apply in this mode. They exist
+    to spread a fixed chain across the run, which choosing the order already
+    does, so a scoop is available as soon as you can reach it.
+
+    Has no effect if ScoopSanity is disabled.
+    """
+    display_name = "Main Scoops In Any Order"
+    default = False
 
 
 class ExcludeLevels(Toggle):
@@ -283,6 +330,26 @@ class SurvivorRespawn(DefaultOnToggle):
     This option has no effect if ScoopSanity is off.
     """
     display_name = "Survivor Respawn"
+
+
+class OvertimeProgressionGating(Toggle):
+    """
+    Adds gates to Overtime so Ending S is a longer run than Ending A rather
+    than the same run with a different ending.
+
+    With this off, Overtime plays as it always has. Its checks still exist --
+    the queens, the gates in the cave, the suppressant hand-ins and the rest --
+    they are simply not held back by anything.
+
+    With this on, three things are gated behind items the multiworld has to
+    send you. The eight suppressant ingredients cannot be picked up until their
+    item arrives, though walking up to one still sends its check. Isabela will
+    not leave for the cave without the Cave Key. The Humvee will not start
+    without the Humvee Key.
+
+    This option has no effect unless the goal is Ending S.
+    """
+    display_name = "Overtime Progression Gating"
 
 
 class NightModeEnabled(Toggle):
@@ -448,13 +515,13 @@ class PPStickersFiller(Toggle):
 class SplitKeys(Toggle):
     """
     Normally, an area key opens all doors leading into an area. The 'Wonderland
-    Plaza key' opens the doors to it from both North Plaza and the Food Court.
+    Plaza Key' opens the doors to it from both North Plaza and the Food Court.
 
     In Split Keys, each individual entrance has its own key. Entering Wonderland
-    Plaza from North Plaza would require the 'North - Wonderland Key'. Entering
-    from Food Court, however, would require the 'Food - Wonderland Key'.
+    Plaza from North Plaza would require the 'North Plaza - Wonderland Plaza Key'. Entering
+    from Food Court, however, would require the 'Food Court - Wonderland Plaza Key'.
 
-    Keys work in both directions. The 'Leisure - Paradise Key' opens the door from
+    Keys work in both directions. The 'Leisure Park - Paradise Plaza Key' opens the door from
     both Leisure Park into Paradise Plaza and from Paradise Plaza into Leisure Park.
 
     Each key is named by area alphabetically (Crislip's - North, Food - Fresca, etc).
@@ -477,8 +544,11 @@ class DROption(PerGameCommonOptions):
     restricted_item_mode: RestrictedItemMode
     door_randomizer: DoorRandomizer
     door_randomizer_mode: DoorRandomizerMode
+    door_locks: DoorLocks
     randomize_rooftop_service_hallway_doors: RandomizeRooftopServiceHallwayDoors
     scoop_sanity: ScoopSanity
+    randomize_scoop_order: RandomizeScoopOrder
+    main_scoops_any_order: MainScoopsAnyOrder
     exclude_levels: ExcludeLevels
     exclude_levels_above: ExcludeLevelsAbove
     enable_skill_items: EnableSkillItems
@@ -491,6 +561,7 @@ class DROption(PerGameCommonOptions):
     hostile_survivor_count_max: HostileSurvivorCountMax
     cult_limited: CultLimited
     survivor_respawn: SurvivorRespawn
+    overtime_progression_gating: OvertimeProgressionGating
     night_mode_enabled: NightModeEnabled
     hardcore_zombies_enabled: HardcoreZombiesEnabled
     random_starting_costume: RandomStartingCostume
@@ -506,10 +577,13 @@ dr_option_groups = [
             Goal,
             NumberOfSurvivors,
             ScoopSanity,
+            RandomizeScoopOrder,
+            MainScoopsAnyOrder,
             PpBonusLocations,
             ExcludeLevels,
             ExcludeLevelsAbove,
             PPStickersFiller,
+            OvertimeProgressionGating,
         ],
     ),
     OptionGroup(
@@ -517,6 +591,7 @@ dr_option_groups = [
         [
             DoorRandomizer,
             DoorRandomizerMode,
+            DoorLocks,
             RandomizeRooftopServiceHallwayDoors
         ],
     ),

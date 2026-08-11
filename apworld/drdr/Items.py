@@ -252,45 +252,48 @@ _all_items = [DRItemData(row[0], row[1], row[2]) for row in [
     ("Book [Wrestling]", 204, DRItemCategory.CONSUMABLE),
 
     # Area locks
-    ("Al Fresca Plaza key", 1000, DRItemCategory.LOCK),
-    ("Colby's Movieland key", 1001, DRItemCategory.LOCK),
-    ("Crislip's Home Saloon key", 1002, DRItemCategory.LOCK),
-    ("Entrance Plaza key", 1003, DRItemCategory.LOCK),
-    ("Food Court key", 1004, DRItemCategory.LOCK),
-    ("Seon's Food and Stuff key", 1005, DRItemCategory.LOCK),
-    ("Carlito's Hideout key", 1006, DRItemCategory.LOCK),
-    ("Leisure Park key", 1007, DRItemCategory.LOCK),
-    ("Maintenance Tunnel key", 1008, DRItemCategory.LOCK),
-    ("North Plaza key", 1009, DRItemCategory.LOCK),
-    ("Paradise Plaza key", 1010, DRItemCategory.LOCK),
-    ("Rooftop key", 1011, DRItemCategory.LOCK),
-    ("Warehouse key", 1012, DRItemCategory.LOCK),
-    ("Wonderland Plaza key", 1013, DRItemCategory.LOCK),
+    ("Al Fresca Plaza Key", 1000, DRItemCategory.LOCK),
+    ("Colby's Movieland Key", 1001, DRItemCategory.LOCK),
+    ("Crislip's Home Saloon Key", 1002, DRItemCategory.LOCK),
+    ("Entrance Plaza Key", 1003, DRItemCategory.LOCK),
+    ("Food Court Key", 1004, DRItemCategory.LOCK),
+    ("Seon's Food and Stuff Key", 1005, DRItemCategory.LOCK),
+    ("Carlito's Hideout Key", 1006, DRItemCategory.LOCK),
+    ("Leisure Park Key", 1007, DRItemCategory.LOCK),
+    ("Maintenance Tunnel Key", 1008, DRItemCategory.LOCK),
+    ("North Plaza Key", 1009, DRItemCategory.LOCK),
+    ("Paradise Plaza Key", 1010, DRItemCategory.LOCK),
+    ("Rooftop Key", 1011, DRItemCategory.LOCK),
+    ("Warehouse Key", 1012, DRItemCategory.LOCK),
+    ("Wonderland Plaza Key", 1013, DRItemCategory.LOCK),
+    ("Meat Processing Area Key", 1038, DRItemCategory.LOCK),
 
     # Split keys
-    ("Rooftop - Security Key", 1014, DRItemCategory.LOCK),
+    ("Rooftop - Security Room Key", 1014, DRItemCategory.LOCK),
     ("Rooftop - Warehouse Key", 1015, DRItemCategory.LOCK),
-    ("Paradise - Warehouse Key", 1016, DRItemCategory.LOCK),
-    ("Leisure - Paradise Key", 1017, DRItemCategory.LOCK),
-    ("Colby's - Paradise Key", 1018, DRItemCategory.LOCK),
-    ("Entrance - Paradise Key", 1019, DRItemCategory.LOCK),
-    ("Entrance - Security Key", 1020, DRItemCategory.LOCK),
-    ("Entrance - Fresca Key", 1021, DRItemCategory.LOCK),
-    ("Food - Fresca Key", 1022, DRItemCategory.LOCK),
-    ("Food - Leisure Key", 1023, DRItemCategory.LOCK),
-    ("Food - Wonderland Key", 1024, DRItemCategory.LOCK),
-    ("North - Wonderland Key", 1025, DRItemCategory.LOCK),
-    ("Leisure - North Key", 1026, DRItemCategory.LOCK),
-    ("Crislip's - North Key", 1027, DRItemCategory.LOCK),
-    ("Hideout - North Key", 1028, DRItemCategory.LOCK),
-    ("North - Seon's Key", 1029, DRItemCategory.LOCK),
-    ("Leisure - Maintenance Key", 1030, DRItemCategory.LOCK),
-    ("Maintenance - Paradise Key", 1031, DRItemCategory.LOCK),
-    ("Entrance - Maintenance Key", 1032, DRItemCategory.LOCK),
-    ("Fresca - Maintenance Key", 1033, DRItemCategory.LOCK),
-    ("Food - Maintenance Key", 1034, DRItemCategory.LOCK),
-    ("Maintenance - Wonderland Key", 1035, DRItemCategory.LOCK),
-    ("Maintenance - Seon's Key", 1036, DRItemCategory.LOCK),
+    ("Paradise Plaza - Warehouse Key", 1016, DRItemCategory.LOCK),
+    ("Leisure Park - Paradise Plaza Key", 1017, DRItemCategory.LOCK),
+    ("Colby's Movieland - Paradise Plaza Key", 1018, DRItemCategory.LOCK),
+    ("Entrance Plaza - Paradise Plaza Key", 1019, DRItemCategory.LOCK),
+    ("Entrance Plaza - Security Room Key", 1020, DRItemCategory.LOCK),
+    ("Al Fresca Plaza - Entrance Plaza Key", 1021, DRItemCategory.LOCK),
+    ("Al Fresca Plaza - Food Court Key", 1022, DRItemCategory.LOCK),
+    ("Food Court - Leisure Park Key", 1023, DRItemCategory.LOCK),
+    ("Food Court - Wonderland Plaza Key", 1024, DRItemCategory.LOCK),
+    ("North Plaza - Wonderland Plaza Key", 1025, DRItemCategory.LOCK),
+    ("Leisure Park - North Plaza Key", 1026, DRItemCategory.LOCK),
+    ("Crislip's Home Saloon - North Plaza Key", 1027, DRItemCategory.LOCK),
+    ("Carlito's Hideout - North Plaza Key", 1028, DRItemCategory.LOCK),
+    ("North Plaza - Seon's Food and Stuff Key", 1029, DRItemCategory.LOCK),
+    ("Leisure Park - Maintenance Tunnel Key", 1030, DRItemCategory.LOCK),
+    ("Maintenance Tunnel - Paradise Plaza Key", 1031, DRItemCategory.LOCK),
+    ("Entrance Plaza - Maintenance Tunnel Key", 1032, DRItemCategory.LOCK),
+    ("Al Fresca Plaza - Maintenance Tunnel Key", 1033, DRItemCategory.LOCK),
+    ("Food Court - Maintenance Tunnel Key", 1034, DRItemCategory.LOCK),
+    ("Maintenance Tunnel - Wonderland Plaza Key", 1035, DRItemCategory.LOCK),
+    ("Maintenance Tunnel - Seon's Food and Stuff Key", 1036, DRItemCategory.LOCK),
+    ("Paradise Plaza - Wonderland Plaza Key", 1037, DRItemCategory.LOCK),
+    ("Maintenance Tunnel - Meat Processing Area Key", 1039, DRItemCategory.LOCK),
 
     
     # Special Items
@@ -404,6 +407,24 @@ _all_items = [DRItemData(row[0], row[1], row[2]) for row in [
     ("Damage Player Trap",  4073, DRItemCategory.TRAP),
     ("Hostile NPC Trap",    4074, DRItemCategory.TRAP),
     ("Special Forces Trap", 4075, DRItemCategory.TRAP),
+    # ScoopSanity only -- it waits on "The Convicts" scoop item, which only
+    # exists in that mode. BuildItemPool drops it otherwise.
+    ("Convicts Respawn Trap", 4076, DRItemCategory.TRAP),
+
+    # Overtime suppressant ingredients. The mod holds the pickup until the
+    # matching item arrives, so all eight are needed to hand them in.
+    ("Blender", 5000, DRItemCategory.LOCK),
+    ("First Aid Kit", 5001, DRItemCategory.LOCK),
+    ("Coffee Filters", 5002, DRItemCategory.LOCK),
+    ("Magnifying Glass", 5003, DRItemCategory.LOCK),
+    ("Camp Stove", 5004, DRItemCategory.LOCK),
+    ("Developing Solution", 5005, DRItemCategory.LOCK),
+    ("Perfume Bottle", 5006, DRItemCategory.LOCK),
+    ("Cold Spray", 5007, DRItemCategory.LOCK),
+    # Isabela will not leave for the Cave without it.
+    ("Cave Key", 5008, DRItemCategory.LOCK),
+    # The Humvee will not start without it.
+    ("Humvee Key", 5009, DRItemCategory.LOCK),
     # Note: Night Mode + Hardcore Zombies are NOT items — they are YAML
     # options (`night_mode_enabled`, `hardcore_zombies_enabled` in Options.py)
     # applied at slot-connect by DRAP/effects/ZombieEffects.lua.
@@ -435,6 +456,8 @@ specialty_items = {
     "Frying Pan",      # gates "Heat a pan on N stoves" locations
     "Uncooked Pizza",  # gates "Use N Microwaves" (alongside Raw Meat)
     "Raw Meat",        # gates "Use N Microwaves" (alongside Uncooked Pizza)
+    # Required for Honey Hunt in restricted_item_mode:
+    "Queen",
 }
 
 # Food items that stand in for Seon's Food and Stuff access in the
@@ -482,35 +505,42 @@ progression_skills = {
 }
 
 
-def BuildItemPool(multiworld, count, options, excluded_scoop_names=()):
+def BuildItemPool(multiworld, count, options, excluded_scoop_names=(),
+                  door_locks_active=False):
     """Build the item pool for this world.
 
     excluded_scoop_names: iterable of scoop item names to omit from the pool
     even when ScoopSanity is enabled. Used by the Savior goal to drop main
     scoops (they would advance story state the goal doesn't need).
+
+    door_locks_active: keep the area keys in the pool under door
+    randomization instead of dropping them as precollected.
     """
     item_pool = []
     included_itemcount = 0
 
     # Area keys to skip when door randomizer is enabled
     area_key_names = {
-        "Rooftop key", "Warehouse key", "Paradise Plaza key",
-        "Colby's Movieland key", "Leisure Park key", "North Plaza key",
-        "Crislip's Home Saloon key", "Food Court key", "Wonderland Plaza key",
-        "Al Fresca Plaza key", "Entrance Plaza key", "Seon's Food and Stuff key",
-        "Maintenance Tunnel key", "Carlito's Hideout key", "Maintenance Tunnel Access Key"
+        "Rooftop Key", "Warehouse Key", "Paradise Plaza Key",
+        "Colby's Movieland Key", "Leisure Park Key", "North Plaza Key",
+        "Crislip's Home Saloon Key", "Food Court Key", "Wonderland Plaza Key",
+        "Al Fresca Plaza Key", "Entrance Plaza Key", "Seon's Food and Stuff Key",
+        "Maintenance Tunnel Key", "Carlito's Hideout Key", "Maintenance Tunnel Access Key",
+        "Meat Processing Area Key"
     }
 
     # Keys in Split Keys mode, skipped otherwise
     split_key_names = {
-        "Rooftop - Warehouse Key", "Rooftop - Security Key", "Paradise - Warehouse Key",
-        "Leisure - Paradise Key", "Colby's - Paradise Key", "Entrance - Paradise Key",
-        "Entrance - Security Key", "Entrance - Fresca Key", "Food - Fresca Key",
-        "Food - Leisure Key", "Food - Wonderland Key",
-        "North - Wonderland Key", "Leisure - North Key", "Crislip's - North Key",
-        "Hideout - North Key", "North - Seon's Key", "Leisure - Maintenance Key",
-        "Maintenance - Paradise Key", "Entrance - Maintenance Key", "Food - Maintenance Key",
-        "Fresca - Maintenance Key", "Maintenance - Wonderland Key", "Maintenance - Seon's Key"
+        "Rooftop - Warehouse Key", "Rooftop - Security Room Key", "Paradise Plaza - Warehouse Key",
+        "Leisure Park - Paradise Plaza Key", "Colby's Movieland - Paradise Plaza Key", "Entrance Plaza - Paradise Plaza Key",
+        "Entrance Plaza - Security Room Key", "Al Fresca Plaza - Entrance Plaza Key", "Al Fresca Plaza - Food Court Key",
+        "Food Court - Leisure Park Key", "Food Court - Wonderland Plaza Key",
+        "North Plaza - Wonderland Plaza Key", "Leisure Park - North Plaza Key", "Crislip's Home Saloon - North Plaza Key",
+        "Carlito's Hideout - North Plaza Key", "North Plaza - Seon's Food and Stuff Key", "Leisure Park - Maintenance Tunnel Key",
+        "Maintenance Tunnel - Paradise Plaza Key", "Entrance Plaza - Maintenance Tunnel Key", "Food Court - Maintenance Tunnel Key",
+        "Al Fresca Plaza - Maintenance Tunnel Key", "Maintenance Tunnel - Wonderland Plaza Key", "Maintenance Tunnel - Seon's Food and Stuff Key",
+        "Maintenance Tunnel - Meat Processing Area Key",
+        "Paradise Plaza - Wonderland Plaza Key"
     }
     
     # Time keys to skip when scoop sanity is enabled
@@ -531,6 +561,15 @@ def BuildItemPool(multiworld, count, options, excluded_scoop_names=()):
             item_pool.append(item)
             remaining_count = remaining_count - 1
             included_itemcount = included_itemcount + 1
+    elif options.scoop_sanity.value:
+        # Queen spawning across the mall waits for this item under ScoopSanity,
+        # so one has to exist even when Restricted mode is off -- otherwise the
+        # five Isabela hand-ins have nothing to collect. Restricted mode already
+        # supplies it through specialty_items.
+        item = item_dictionary["Queen"]
+        item_pool.append(item)
+        remaining_count = remaining_count - 1
+        included_itemcount = included_itemcount + 1
 
     itemList = [item for item in _all_items]
     lockList = [item for item in _all_items if item.category == DRItemCategory.LOCK]
@@ -544,6 +583,11 @@ def BuildItemPool(multiworld, count, options, excluded_scoop_names=()):
     # Trap subset of fillers — gated by options.trap_percentage on a per-roll
     # basis when filling remaining slots.
     trapList = [item for item in _all_items if item.category == DRItemCategory.TRAP]
+    # The convicts only fail to come back when the clock is frozen, and the
+    # trap keys off a scoop item that does not exist outside ScoopSanity.
+    if not options.scoop_sanity:
+        trapList = [item for item in trapList
+                    if item.name != "Convicts Respawn Trap"]
     nonTrapFiller = [item for item in itemList if item.category in (
         DRItemCategory.MISC, DRItemCategory.WEAPON, DRItemCategory.CONSUMABLE,
         DRItemCategory.BUFF
@@ -558,15 +602,42 @@ def BuildItemPool(multiworld, count, options, excluded_scoop_names=()):
 
     fillerList = nonTrapFiller + trapList
 
+    # Everything Overtime Progression Gating puts behind the multiworld. Their
+    # locations are Ending-S only, so the items have to be too, or the pool
+    # outgrows the locations -- and with the gating off nothing enforces them,
+    # so they would be items with nothing to open.
+    overtime_gating_on = bool(getattr(options, "overtime_progression_gating",
+                                      type("X", (), {"value": False})()).value)
+    overtime_item_names = {
+        "Blender",
+        "First Aid Kit",
+        "Coffee Filters",
+        "Magnifying Glass",
+        "Camp Stove",
+        "Developing Solution",
+        "Perfume Bottle",
+        "Cold Spray",
+        "Cave Key",
+        "Humvee Key",
+    }
+
     for lock in lockList:
-        # Skip area keys if door randomizer is enabled (they're precollected)
-        if options.door_randomizer or options.split_keys and lock.name in area_key_names:
+        if lock.name in overtime_item_names                 and (options.goal.value != 0 or not overtime_gating_on):
             continue
+        # Area keys are precollected under door randomization, and replaced by
+        # the per-door keys under Split Keys
+        if (options.door_randomizer or options.split_keys) and lock.name in area_key_names:
+            # Door Locks is the exception -- the area keys are what the locks
+            # check, so they have to come from the pool. The Access Key opens
+            # the tunnel doors rather than an area and stays precollected.
+            if not door_locks_active or lock.name == "Maintenance Tunnel Access Key":
+                continue
         # Skip time keys if scoop sanity is enabled
         if options.scoop_sanity and lock.name in time_key_names:
             continue
-        # Skip split keys unless split keys is enabled
-        if not options.split_keys and lock.name in split_key_names:
+        # Split keys exist only in their own mode, and door randomization
+        # precollects them
+        if lock.name in split_key_names and (not options.split_keys or options.door_randomizer):
             continue
 
         item = item_dictionary[lock.name]

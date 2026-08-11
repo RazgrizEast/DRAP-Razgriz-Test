@@ -39,6 +39,23 @@ local EP270_TRIGGER_BOX = {
     min_z = 130.0, max_z = 140.0,
 }
 
+-- Simone Ravendark's corner of Paradise Plaza. Flag 295 tells the game Isabela
+-- is back in the Security Room, which Simone checks before agreeing to follow.
+-- 295 is also a Santa Cabeza byproduct, so once that mission completes the
+-- cascade sweep clears it every cycle and she can never be recruited -- the
+-- long-standing "Rescue Simone Ravendark" bug.
+--
+-- Rather than dropping 295 from the cascade (it is there for a reason we no
+-- longer have), hold it on just around her: ~8m of her spawn point, the same
+-- shape as the flag 301 Hideout toggle below. Outside the box the sweep goes
+-- back to clearing it.
+local SIMONE_FLAG = 295
+local SIMONE_BOX = {
+    min_x = 130.5, max_x = 146.5,
+    min_y = -6.0,  max_y = 8.0,
+    min_z = 11.5,  max_z = 27.5,
+}
+
 -- Engine's "EP-shutter cutscene played" markers, set only by that cutscene's
 -- tail (in no CASCADE/COMPLETION table). They live in save state, so a save
 -- reload resets them and our trigger refires -- no DRAP-side persistence.
@@ -284,6 +301,7 @@ local on_completion_detected_callback = nil
 -- enabling flag 270 and CASCADE_FLAGS clearing it logs every frame.
 local _last_cascade_signature = nil
 local _logged_completion_events = {}   -- event_name -> true
+local _logged_suppressions = {}        -- event_name -> true (see the hook)
 local scoop_sanity_enabled = false
 local cult_limited_enabled = false
 local door_randomizer_enabled = false
@@ -518,6 +536,17 @@ local function get_current_area_index()
     return Shared.to_int(Shared.safe_get_field(am, f))
 end
 
+-- Is the player standing with Simone? Area first, so the position read is
+-- skipped everywhere else.
+local function player_is_with_simone()
+    if get_current_area_index() ~= PARADISE_PLAZA_AREA_INDEX then return false end
+    local x, y, z = get_player_pos_xyz()
+    if not x then return false end
+    return x >= SIMONE_BOX.min_x and x <= SIMONE_BOX.max_x
+       and y >= SIMONE_BOX.min_y and y <= SIMONE_BOX.max_y
+       and z >= SIMONE_BOX.min_z and z <= SIMONE_BOX.max_z
+end
+
 local function each_conflict_scoop()
     local names = {}
     for _, group_list in pairs(CONFLICT_GROUPS) do
@@ -567,7 +596,34 @@ local ENDGAME_FLAGS = { 2052, 514 }
 -- Hideout's secondary while active). Holding it on post-Jessie is a state
 -- vanilla never sees and is the suspected (unproven) cause of the Twin Sisters
 -- no-spawn -- keep it phase-managed only.
-local POST_JESSIE_FLAGS = { 267, 315, 513, 515 }
+local POST_JESSIE_FLAGS = { 267, 513, 515 }
+-- Queen spawning across the mall. Meeting Jessie used to switch it on with the
+-- rest of the post-Jessie set; it now waits for the Queen item, so the five
+-- Isabela hand-ins are behind the multiworld like anything else.
+local QUEEN_SPAWN_FLAG = 315
+
+local function queens_unlocked()
+    local bridge = AP and AP.AP_BRIDGE
+    return (bridge and bridge.has_item_name
+            and bridge.has_item_name("Queen")) == true
+end
+
+--- Held off before the item and on after. Off is enforced as well as on: the
+--- game turns it on by itself once Jessie is met, so leaving it alone would
+--- let queens spawn anyway.
+local function enforce_queen_spawning()
+    local want_on = queens_unlocked()
+    local is_on = raw_check_flag(QUEEN_SPAWN_FLAG)
+    if want_on == is_on then return end
+    if want_on then
+        currently_unlocking = true
+        raw_set_flag_on(QUEEN_SPAWN_FLAG)
+        currently_unlocking = false
+        M.log("Queen received -- queens now spawn")
+    else
+        raw_set_flag_off(QUEEN_SPAWN_FLAG)
+    end
+end
 local CULT_ON = { 326, 811, 1166, 2063 }
 local CULT_OFF = {
     783,                                      -- scoop start flags
@@ -655,8 +711,10 @@ local function enforce_flags_legacy()
     end
 
     enforce_blacklist()
+    enforce_queen_spawning()
 
-    -- Ensure post-Jessie flags stay enabled (267 = progression, 315 = queen spawning; 265 excluded -- see POST_JESSIE_FLAGS)
+    -- Ensure post-Jessie flags stay enabled (267 = progression; 265 and 315
+    -- excluded -- see POST_JESSIE_FLAGS and enforce_queen_spawning)
     if State.is_activated() then
         local post_jessie_flags = { table.unpack(POST_JESSIE_FLAGS) }
         -- Savior mode (without ScoopSanity): force flag 270 always-on so the
@@ -706,6 +764,19 @@ local function enforce_flags_legacy()
                     end
                 end
             end
+        end
+    end
+
+    -- Simone will not follow unless 295 says Isabela is in the Security Room.
+    -- Holding the cascade is not enough on its own: by the time the player
+    -- walks up, the sweep has already cleared it. Set it while they are next
+    -- to her, the same way flag 301 is handled in the Hideout.
+    if State.is_activated() and player_is_with_simone() and not raw_check_flag(SIMONE_FLAG) then
+        currently_unlocking = true
+        raw_set_flag_on(SIMONE_FLAG)
+        currently_unlocking = false
+        if verbose_logging then
+            M.log("Area toggle: enabled flag 295 (player with Simone Ravendark)")
         end
     end
 
@@ -831,7 +902,11 @@ local function enforce_flags_legacy()
     local cascade_details = {}
     for flag_id, owner_scoop in pairs(CASCADE_FLAGS) do
         local mission_active = received_scoops[owner_scoop] and not completed_scoops[owner_scoop]
-        if not mission_active and not is_in_completion_grace(owner_scoop) and raw_check_flag(flag_id) then
+        -- 295 is Santa Cabeza's byproduct but also what Simone checks, so it
+        -- stays on while the player is next to her (see SIMONE_BOX).
+        local held = (flag_id == SIMONE_FLAG) and player_is_with_simone()
+        if not mission_active and not held
+            and not is_in_completion_grace(owner_scoop) and raw_check_flag(flag_id) then
             raw_set_flag_off(flag_id)
             cascade_count = cascade_count + 1
             table.insert(cascade_details, string.format("%d(%s)", flag_id, owner_scoop))
@@ -969,6 +1044,7 @@ local function get_reconciler_policies()
             protected_primary_flags = PROTECTED_PRIMARY_FLAGS,
             main_blocks_side = MAIN_BLOCKS_SIDE,
             post_jessie_flags = POST_JESSIE_FLAGS,
+            queen_spawn_flag = QUEEN_SPAWN_FLAG,
             cult_on = CULT_ON,
             cult_off = CULT_OFF,
             endgame_flags = ENDGAME_FLAGS,
@@ -989,6 +1065,7 @@ end
 local function build_reconciler_ctx()
     return {
         activated = State.is_activated(),
+        queens_unlocked = queens_unlocked(),
         endgame = State.is_endgame_reached(),
         scoop_sanity = scoop_sanity_enabled,
         cult_limited = cult_limited_enabled,
@@ -1076,7 +1153,23 @@ local function install_hooks()
             function(args)
                 local flag_id = sdk.to_int64(args[3]) & 0xFFFFFFFF
 
-                if currently_unlocking then return args end
+                if currently_unlocking then
+                    -- Our own unlock writes flags, so the hook stands down to
+                    -- avoid reacting to itself. A real completion landing in
+                    -- that window is discarded outright, and the engine will
+                    -- not raise the flag again -- so say so, or the check just
+                    -- goes missing and looks like the game was slow.
+                    local dropped = COMPLETION_FLAGS[flag_id]
+                    if dropped and not completed_scoops[dropped.scoop]
+                            and not _logged_suppressions[dropped.event] then
+                        _logged_suppressions[dropped.event] = true
+                        M.log(string.format(
+                            "COMPLETION flag %d -> '%s' arrived while unlocking"
+                                .. " another scoop -- NOT counted",
+                            flag_id, dropped.event))
+                    end
+                    return args
+                end
 
                 if FLAG_BLACKLIST[flag_id] then
                     if verbose_logging then
@@ -1099,7 +1192,13 @@ local function install_hooks()
                                   and SCOOP_DATA[completion.scoop].category == "Main"
                                   and not received_scoops[completion.scoop]
                     if ss_block then
-                        if verbose_logging then
+                        -- Logged plainly, not just under verbose: this is the
+                        -- other way a completion goes quiet, and telling it
+                        -- apart from a slow game is impossible after the fact.
+                        -- Once per event, though -- the engine re-asserts the
+                        -- flag every frame and we clear it every frame back.
+                        if not _logged_suppressions[completion.event] then
+                            _logged_suppressions[completion.event] = true
                             M.log(string.format(
                                 "ScoopSanity guard: flag %d -> '%s' suppressed ('%s' not yet received as AP item)",
                                 flag_id, completion.event, completion.scoop))
@@ -1201,7 +1300,7 @@ local function activate_ap(reason)
     State.set_activated(true)
     M.log(reason or "AP enforcement activated")
     -- Enable flags needed after Meet Jessie
-    local post_jessie_flags = { 265, 267, 315, 514 }
+    local post_jessie_flags = { 265, 267, 514 }
     -- Savior mode (without ScoopSanity): fire flag 270 immediately so the
     -- EP-shutter cutscene plays naturally on EP entry. Under ScoopSanity,
     -- the position-gated path (try_fire_ep270_in_scoop_sanity) handles it
@@ -1334,6 +1433,56 @@ end
 -- Wire the pure state machine to this module's engine adapters. Must run
 -- after the locals it captures (raw_check_flag,
 -- apply_unlock_writes, save_state) are defined.
+-- Scoop -> the area codes it needs reachable, from drdr_shared.json's
+-- required_regions. Region names are mapped through the areas table so the
+-- rules and the mod stay keyed on the same list.
+-- Scoop -> the split keys its route needs, from drdr_shared.json. Only
+-- consulted when Split Keys is on; the other modes have no such items.
+local function build_split_key_doors()
+    local out, n = {}, 0
+    for _, scoop in ipairs(SharedData.scoops()) do
+        local keys = scoop.required_split_keys
+        if scoop.name and keys and #keys > 0 then
+            out[scoop.name] = keys
+            n = n + 1
+        end
+    end
+    M.log(string.format("Split-key routes loaded for %d scoop(s)", n))
+    return out
+end
+
+local function build_region_requirements()
+    local code_for = {}
+    for _, area in ipairs(SharedData.areas()) do
+        if area.name and area.scene_code then
+            code_for[area.name] = area.scene_code
+        end
+    end
+    local out, n = {}, 0
+    for _, scoop in ipairs(SharedData.scoops()) do
+        local regions = scoop.required_regions
+        if scoop.name and regions and #regions > 0 then
+            local codes = {}
+            for _, region in ipairs(regions) do
+                local code = code_for[region]
+                if code then
+                    codes[#codes + 1] = code
+                else
+                    M.log(string.format(
+                        "region requirement '%s' for '%s' has no area code",
+                        tostring(region), tostring(scoop.name)))
+                end
+            end
+            if #codes > 0 then
+                out[scoop.name] = codes
+                n = n + 1
+            end
+        end
+    end
+    M.log(string.format("Region requirements loaded for %d scoop(s)", n))
+    return out
+end
+
 State.init({
     scoop_data = SCOOP_DATA,
     conflict_groups = CONFLICT_GROUPS,
@@ -1341,7 +1490,10 @@ State.init({
     prerequisites = SCOOP_PREREQUISITES,
     flag_prerequisites = SCOOP_FLAG_PREREQUISITES,
     flag_prereq_bypass = { ["Mark of the Sniper"] = "any_main_completed" },
-    item_requirements = { ["Hideout"] = "Carlito's Hideout key" },
+    -- Hideout used to wait on "Carlito's Hideout Key" by name, which does not
+    -- exist under Split Keys. Its required_regions already include Carlito's
+    -- Hideout, and reaching that asks the right question in every mode.
+    item_requirements = {},
     chain_final = "The Facts",
     log = M.log,
     now = os.clock,
@@ -1352,7 +1504,17 @@ State.init({
     end,
     on_unlock = apply_unlock_writes,
     on_state_changed = function() save_state() end,
+    region_requirements = build_region_requirements(),
+    split_key_doors = build_split_key_doors(),
+    can_reach_area = function(code)
+        local dsl = AP and AP.DoorSceneLock
+        -- No lock module means no locks to respect; never hold a
+        -- scoop back on a question we cannot answer.
+        if not (dsl and dsl.can_reach_area) then return true end
+        return dsl.can_reach_area(code)
+    end,
 })
+
 
 -- World-stability gate: unlock flag-writes must never land during load
 -- screens, the title screen, or just after a load. An item replaying on
@@ -1584,6 +1746,7 @@ function M.reset_for_new_game()
     -- Reset log-spam dedup state so a fresh run logs anew.
     _last_cascade_signature = nil
     _logged_completion_events = {}
+    _logged_suppressions = {}
 
     State.reset_for_new_game()
 end
@@ -1736,6 +1899,33 @@ end
 
 function M.is_scoop_sanity_enabled()
     return scoop_sanity_enabled
+end
+
+--- Has the player talked to Jessie yet? Tri-state: true, false, or nil when
+--- the flag could not be read (common inside the load window). Callers must
+--- not treat nil as either answer -- DoorSceneLock keeps its last good read.
+function M.has_met_jessie()
+    return raw_check_flag(JESSIE_FLAG)
+end
+
+-- Any Order: the chain stops auto-advancing and the player starts main
+-- scoops from the GUI instead. State owns the rules; this just forwards.
+function M.set_split_keys_enabled(enabled)
+    State.set_split_keys(enabled == true)
+    M.log("Split key routes " .. (enabled and "ENFORCED" or "off"))
+end
+
+function M.set_any_order_enabled(enabled)
+    State.set_any_order(enabled == true)
+    M.log("Main scoops in any order " .. (enabled and "ENABLED" or "DISABLED"))
+end
+
+function M.main_scoop_menu()
+    return State.main_scoop_menu()
+end
+
+function M.activate_main_scoop(name)
+    return State.activate_main_scoop(name)
 end
 
 function M.set_cult_limited_enabled(enabled)
@@ -1908,22 +2098,44 @@ function M.draw_tab_content(debug)
         imgui.separator()
 
         if not debug then
-            imgui.text("Main Story:")
+            local any_order = State.is_any_order()
+            local running = any_order and State.active_main_scoop() or nil
+            imgui.text(any_order and "Main Story (pick one):" or "Main Story:")
             for i, name in ipairs(scoop_order) do
                 local color
                 local has_item = ap_received[name] or received_scoops[name]
+                -- In any-order there is no "current" scoop, so the highlight
+                -- follows whichever one the player started.
+                local highlight = any_order and running or current_chain_name
                 if completed_scoops[name] then
                     color = 0xFF888888          -- gray: completed
-                elseif name == current_chain_name and has_item then
+                elseif name == highlight and has_item then
                     color = 0xFF00FF00          -- green: current + received
-                elseif name == current_chain_name then
+                elseif name == highlight then
                     color = 0xFF0000FF          -- red: current + not received (yellow was confusing)
                 elseif has_item then
                     color = 0xFFFF8800          -- blue: received + not current
                 else
                     color = 0xFF0000FF          -- red: not received + not current
                 end
-                imgui.text_colored(string.format("  %d. %s", i, name), color)
+
+                local label = string.format("  %d. %s", i, name)
+                if any_order and not completed_scoops[name] then
+                    local blocker = State.main_scoop_blocker(name)
+                    if blocker == nil then
+                        if imgui.button("Start##" .. name) then
+                            M.activate_main_scoop(name)
+                        end
+                        imgui.same_line()
+                        imgui.text_colored(label, color)
+                    else
+                        -- Say why rather than dropping the row; "where did it
+                        -- go" is a worse question than "why can I not."
+                        imgui.text_colored(label .. "  -- " .. blocker, color)
+                    end
+                else
+                    imgui.text_colored(label, color)
+                end
             end
         else
             local chain_idx = M.get_current_chain_index()
@@ -2034,7 +2246,7 @@ function M.draw_tab_content(debug)
     end
 
     if State.is_item_deferred("Hideout") then
-        imgui.text_colored("Hideout deferred: waiting for Carlito's Hideout key", 0xFF00AAFF)
+        imgui.text_colored("Hideout deferred: waiting for Carlito's Hideout Key", 0xFF00AAFF)
     end
 
     for _, s in ipairs(status_list) do
@@ -2317,7 +2529,7 @@ function M.on_frame()
     end
 
     -- Poll-class deferral retries (flag prereqs + required items, e.g.
-    -- the Carlito's Hideout key). The state machine only checks scoops
+    -- the Carlito's Hideout Key). The state machine only checks scoops
     -- that previously deferred, so the common case is a single next().
     State.poll_deferred_retries()
 
@@ -2359,6 +2571,34 @@ _G.drap_ep270_show_pos = function()
         x, y, z, tostring(area), tostring(in_ep270_box(x, y, z)),
         tostring(ep270_gates_open()), tostring(f765), tostring(f2280)))
 end
+-- Simone's box was sized from her bundled spawn point, not measured in game.
+-- Stand next to her and call this to see whether she is covered; widen with
+-- drap_simone_set_box if the flag is not being held.
+_G.drap_simone_status = function()
+    local x, y, z = get_player_pos_xyz()
+    if not x then
+        M.log("Simone: player not spawned (no position available)")
+        return
+    end
+    M.log(string.format(
+        "Simone: pos=(%.2f, %.2f, %.2f) area=%s in_box=%s flag295=%s"
+            .. " box=x[%.1f,%.1f] y[%.1f,%.1f] z[%.1f,%.1f]",
+        x, y, z, tostring(get_current_area_index()),
+        tostring(player_is_with_simone()), tostring(raw_check_flag(SIMONE_FLAG)),
+        SIMONE_BOX.min_x, SIMONE_BOX.max_x, SIMONE_BOX.min_y,
+        SIMONE_BOX.max_y, SIMONE_BOX.min_z, SIMONE_BOX.max_z))
+end
+_G.drap_simone_set_box = function(min_x, max_x, min_y, max_y, min_z, max_z)
+    SIMONE_BOX = {
+        min_x = tonumber(min_x), max_x = tonumber(max_x),
+        min_y = tonumber(min_y), max_y = tonumber(max_y),
+        min_z = tonumber(min_z), max_z = tonumber(max_z),
+    }
+    M.log(string.format("Simone: box set to x[%.1f,%.1f] y[%.1f,%.1f] z[%.1f,%.1f]",
+        SIMONE_BOX.min_x, SIMONE_BOX.max_x, SIMONE_BOX.min_y,
+        SIMONE_BOX.max_y, SIMONE_BOX.min_z, SIMONE_BOX.max_z))
+end
+
 _G.drap_ep270_set_box = function(min_x, max_x, min_y, max_y, min_z, max_z)
     EP270_TRIGGER_BOX = {
         min_x = tonumber(min_x), max_x = tonumber(max_x),

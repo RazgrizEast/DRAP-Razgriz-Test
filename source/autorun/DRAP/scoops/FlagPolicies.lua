@@ -40,7 +40,8 @@ local M = {}
 -- deps: the data tables owned by ScoopUnlocker.
 --   scoop_data, controlled_flags, cascade_flags, all_side_scoop_flags,
 --   blacklist, protected_primary_flags, main_blocks_side,
---   post_jessie_flags, cult_on, cult_off, endgame_flags
+--   post_jessie_flags, queen_spawn_flag, cult_on, cult_off,
+--   endgame_flags
 function M.build(deps)
     local D = deps
 
@@ -117,6 +118,18 @@ function M.build(deps)
             if ctx.goal_mode == 2 and not ctx.scoop_sanity then
                 claim(270, "on")
             end
+        end,
+    }
+
+    ----------------------------------------------------------------
+    policy{
+        name = "queen-spawning", priority = 80, unshielded = true,
+        collect = function(ctx, claim)
+            if ctx.endgame or not ctx.activated then return end
+            if not D.queen_spawn_flag then return end
+            -- Off is claimed as well as on: meeting Jessie turns this on by
+            -- itself, so not claiming it would let queens spawn anyway.
+            claim(D.queen_spawn_flag, ctx.queens_unlocked and "on" or "off")
         end,
     }
 
