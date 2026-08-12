@@ -108,6 +108,36 @@ end
 -- door_id format: "<from_area>|<area_jump_name>|door<door_no>"
 local STATIC_REDIRECT_DOOR_ID = "SCN_s100|s138|door0"
 
+-- Leaving the Cultists' Hideout drops the player in Leisure Park. Nothing
+-- else about the hideout is optional -- the raincoats take you there from
+-- Paradise Plaza whether you like it or not -- so an exit into a locked
+-- Leisure Park is a soft lock, and the two PP stickers inside needed both
+-- regions reachable just to be collectable.
+--
+-- Redirected to where the Leisure Park door lands in Paradise Plaza, which is
+-- the side the player came from. Read from drdr_doors.json, SCN_s700|s200.
+local HIDEOUT_EXIT_TARGET = {
+    target_area = "s200",
+    target_pos = { x = 116.80, y = 0.00, z = -33.70 },
+    target_angle = { x = 0.0, y = 1.33, z = 0.0 },
+}
+-- Told by walking up to the door, not by going through it. Announcing it at
+-- the crossing meant there was no DialogueUI to draw into yet, and telling
+-- someone where they came out after the fact is worse than warning them
+-- first. Position read in game at the exit.
+local HIDEOUT_EXIT_SCENE = "s504"
+local HIDEOUT_EXIT_POS = { x = 88.566, y = 0.000, z = -100.590 }
+local HIDEOUT_EXIT_RADIUS_SQ = 8.0 * 8.0   -- DoorPromptOverlay.ANCHOR_RADIUS_SQ
+local near_hideout_exit = false
+-- The door number has not been captured, so every plausible one is claimed.
+-- Registering an id for a door that does not exist is inert, and a silent
+-- miss here would look exactly like the redirect working.
+local HIDEOUT_EXIT_DOOR_IDS = {
+    "SCN_s504|s700|door0",
+    "SCN_s504|s700|door1",
+    "SCN_s504|s700|door2",
+}
+
 -- Canonical Rooftop->SafeRoom arrival (sourced from DoorRandomization.py's
 -- "SCN_s231|s136|door0" entry); used for the escort path under non-randomizer
 -- routing so the engine's rescue-complete cutscene trigger fires.
@@ -358,9 +388,26 @@ local function fixup_s100()
     return true
 end
 
+local function fixup_s504()
+    local dr = _G.AP and _G.AP.DoorRandomizer
+    if not dr or not dr.add_static_redirect then return true end
+
+    local existing = dr.get_static_redirects and dr.get_static_redirects() or {}
+    if existing[HIDEOUT_EXIT_DOOR_IDS[1]] then return true end
+
+    if dr.ensure_hook then pcall(dr.ensure_hook) end
+
+    for _, door_id in ipairs(HIDEOUT_EXIT_DOOR_IDS) do
+        dr.add_static_redirect(door_id, HIDEOUT_EXIT_TARGET)
+    end
+    log("s504: hideout exit redirected to Paradise Plaza")
+    return true
+end
+
 local FIXUPS = {
     SCN_s136 = fixup_s136,
     SCN_s100 = fixup_s100,
+    SCN_s504 = fixup_s504,
 }
 
 ------------------------------------------------------------
@@ -449,10 +496,55 @@ local function _dump_omlist_for_diagnosis(scene)
     end
 end
 
+--- Warns before the door is used, so coming out somewhere other than Leisure
+--- Park is expected rather than a surprise. Enter/exit edge, so walking away
+--- and back says it again.
+local function show_hideout_exit_toast()
+    local am = sdk.get_managed_singleton("app.solid.gamemastering.AreaManager")
+    if not am then return end
+    local path
+    pcall(function() path = am:get_field("CurrentLevelPath") end)
+    local scene = tostring(path or ""):gsub("^SCN_", "")
+    if scene ~= HIDEOUT_EXIT_SCENE then
+        near_hideout_exit = false
+        return
+    end
+
+    local pm = sdk.get_managed_singleton("app.solid.PlayerManager")
+    if not pm then return end
+    local cond
+    pcall(function() cond = pm:call("get_CurrentPlayerCondition") end)
+    if not cond then return end
+    local pos
+    pcall(function() pos = cond:get_field("LastPlayerPos") end)
+    if not pos then return end
+
+    local dx, dy, dz
+    pcall(function()
+        dx = pos.x - HIDEOUT_EXIT_POS.x
+        dy = pos.y - HIDEOUT_EXIT_POS.y
+        dz = pos.z - HIDEOUT_EXIT_POS.z
+    end)
+    if not dx then return end
+
+    local inside = (dx * dx + dy * dy + dz * dz) <= HIDEOUT_EXIT_RADIUS_SQ
+    if inside == near_hideout_exit then return end
+    near_hideout_exit = inside
+    if not inside then return end
+
+    local Notify = package.loaded["DRAP/Notify"] or require("DRAP/Notify")
+    if Notify and Notify.send then
+        pcall(Notify.send, "This exit leads to Paradise Plaza.",
+            { duration = 6.0 })
+    end
+    log("player reached the hideout exit -- told about the redirect")
+end
+
 local function install_frame_cb()
     if frame_cb_installed then return end
     re.on_frame(function()
         check_ap_state_transition()
+        show_hideout_exit_toast()
         if next(pending) == nil then return end
         for scene, fn in pairs(pending) do
             frames_waited[scene] = (frames_waited[scene] or 0) + 1
@@ -491,6 +583,38 @@ end
 -- Manually queue all fixups against the current scene. Use after a state
 -- change that would have made a fixup eligible (e.g. AP activation while
 -- standing in s136), since onLoadMapEvent only fires on actual transitions.
+--- Registers the hideout redirect by hand, for testing it without a slot.
+--- The fixup does this on entering s504 in a real run; this also installs the
+--- areaJump hook, which the frame loop would otherwise never reach.
+---
+---   drap_hideout_exit(true)   -- redirect the exit into Paradise Plaza
+---   drap_hideout_exit(false)  -- back to vanilla (Leisure Park)
+_G.drap_hideout_exit = function(on)
+    local dr = _G.AP and _G.AP.DoorRandomizer
+    if not dr then log("DoorRandomizer not loaded"); return false end
+
+    if on == false then
+        for _, door_id in ipairs(HIDEOUT_EXIT_DOOR_IDS) do
+            if dr.remove_static_redirect then
+                pcall(dr.remove_static_redirect, door_id)
+            end
+        end
+        log("hideout exit back to vanilla")
+        return false
+    end
+
+    if dr.ensure_hook and not dr.ensure_hook() then return false end
+    for _, door_id in ipairs(HIDEOUT_EXIT_DOOR_IDS) do
+        dr.add_static_redirect(door_id, HIDEOUT_EXIT_TARGET)
+    end
+    log(string.format("hideout exit -> %s (%.2f, %.2f, %.2f)",
+        HIDEOUT_EXIT_TARGET.target_area,
+        HIDEOUT_EXIT_TARGET.target_pos.x,
+        HIDEOUT_EXIT_TARGET.target_pos.y,
+        HIDEOUT_EXIT_TARGET.target_pos.z))
+    return true
+end
+
 function M.apply_for_current_scene()
     local am = sdk.get_managed_singleton("app.solid.gamemastering.AreaManager")
     if not am then return end

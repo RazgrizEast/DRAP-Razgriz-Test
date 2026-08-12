@@ -288,6 +288,7 @@ local function discover_ahlm_methods()
     return nil, "areaJump method not found"
 end
 
+
 --- Resolves areaJump without installing anything.
 ---
 --- The frame loop is silent while no slot is connected, so in a vanilla run
@@ -453,6 +454,23 @@ local function install_hook()
     hook_installed = true
     M.log("Door randomizer hook installed")
     return true
+end
+
+--- Installs the areaJump hook outside the frame loop, which is silent while
+--- no slot is connected. Static redirects need the hook to exist, so without
+--- this they cannot be tested in a vanilla run at all. Debug Mode is the gate,
+--- same as the warp.
+function M.ensure_hook()
+    if hook_installed then return true end
+    local GUI = package.loaded["DRAP/GUI"]
+    local debug_on = GUI and GUI.is_debug and GUI.is_debug() or false
+    if not (Activation.is_active() or debug_on) then
+        M.log("cannot install the areaJump hook: turn on Debug Mode "
+            .. "(no slot connected)")
+        return false
+    end
+    hook_install_attempted = false      -- allow a retry from the console
+    return install_hook()
 end
 
 ------------------------------------------------------------

@@ -173,6 +173,9 @@ Shared.SCENE_INFO = {
     s600 = { name = "Maintenance Tunnel",    index = 1536 },
     s401 = { name = "Carlito's Hideout",     index = 1025 },
     s601 = { name = "Meat Processing Area",  index = 1537 },
+    -- Where the raincoats take you. Not in the area graph: it is entered
+    -- by cutscene, not through a door.
+    s504 = { name = "Cultists' Hideout",     index = 1284 },
 
     -- The Overtime Cave, in the order it is played. No door anywhere leads
     -- here -- it is entered from Isabela's departure cutscene -- so these

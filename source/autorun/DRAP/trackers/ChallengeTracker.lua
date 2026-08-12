@@ -145,11 +145,10 @@ local CHALLENGES = {
         targets = { 87 },
         location_ids = { "Build a profile for 87 survivors" },
     },
-    ResultNPCCountMax = {
-        label   = "Survivors saved in result",
-        targets = { 10, 50 },
-        location_ids = { "Save 10 survivors", "Save 50 survivors" },
-    },
+    -- ResultNPCCountMax is deliberately absent. It only populates on the
+    -- results screen, so checks driven from it never landed until an ending
+    -- -- which is the opposite of what a "rescue N" check is for. The
+    -- milestones count live Rescue checks instead, in SaviorGoalEffects.
     PhotoPointMax = {
         label   = "Max photo PP in one shot",
         targets = { 10000 },

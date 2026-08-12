@@ -550,8 +550,32 @@ local function get_player_stats()
     return PlayerStats_mod
 end
 
+--- The eight suppressants gate Overtime the way a key gates an area, and none
+--- of them has a world prefab -- they are not in the item catalogue at all, so
+--- the spawner could only ever fail on them. Listed with the keys instead, on
+--- a tester's report that they were cluttering the spawnable items.
+---
+--- Read from the data rather than named here, so a ninth Overtime item needs
+--- no code change.
+local overtime_names = nil
+
+local function is_overtime_item(item_name)
+    if not item_name then return false end
+    if not overtime_names then
+        overtime_names = {}
+        local ok, SharedData = pcall(require, "DRAP/SharedData")
+        if ok and SharedData and SharedData.overtime_items then
+            for _, e in ipairs(SharedData.overtime_items() or {}) do
+                if e.name then overtime_names[e.name] = true end
+            end
+        end
+    end
+    return overtime_names[item_name] == true
+end
+
 local function is_effect_item(item_name)
     if not item_name then return false end
+    if is_overtime_item(item_name) then return true end
 
     -- Filter out scoop/milestone event items handled by ScoopUnlocker
     local su = get_scoop_unlocker()
@@ -608,6 +632,7 @@ end
 local function is_key_item(item_name)
     if not item_name then return false end
     if item_name == "Hockey Stick" then return false end
+    if is_overtime_item(item_name) then return true end
     return string.find(string.lower(item_name), "key", 1, true) ~= nil
 end
 

@@ -229,7 +229,7 @@ PP_STICKER_GROUPS = [
     (2, ["Crislip's Home Saloon"], []),                                           # Stickers 74-75
     (10, ["Entrance Plaza"], ["Escort Brad to see Dr Barnaby"]),                  # Stickers 25-34
     (7, ["Maintenance Tunnel"], []),                                              # Stickers 90-96
-    (2, ["Paradise Plaza", "Leisure Park"], ["Get grabbed by the raincoats"]),    # Stickers 98-99
+    (2, ["Paradise Plaza"], ["Get grabbed by the raincoats"]),                    # Stickers 98-99
 ]
 
 # Zones with a direct door into the Maintenance Tunnel. The Leisure Park
@@ -525,6 +525,17 @@ def set_rules(world) -> None:
     for level in range(41, 51):    # Levels 41-50
         world.set_rule(world.multiworld.get_location(f"Reach Level {level}", world.player),
                       RegionPointsAtLeast(25))
+
+    # Exclude Rescues Above code
+    if world.options.exclude_rescues:
+        rescue_threshold = world.options.exclude_rescues_above.value
+
+        # 48 is every survivor in the mall, so it excludes nothing
+        if rescue_threshold < 48:
+            for location in world.multiworld.get_locations(world.player):
+                match = re.fullmatch(r"Rescue (\d+) survivors", location.name)
+                if match and int(match.group(1)) > rescue_threshold:
+                    location.progress_type = LocationProgressType.EXCLUDED
 
     # Exclude Levels Above code
     if world.options.exclude_levels:
@@ -863,8 +874,6 @@ def set_rules(world) -> None:
         "Get 50 survivors to join",
         "Encounter 10 survivors",
         "Encounter 50 survivors",
-        "Save 10 survivors",
-        "Save 50 survivors",
     ):
         world.multiworld.get_location(_name, world.player).progress_type = LocationProgressType.EXCLUDED
 
@@ -897,7 +906,7 @@ def set_rules(world) -> None:
     world.set_rule(world.multiworld.get_location("Kill Roger and Jack (and Thomas if you want) and chat with Wayne", world.player), And(CanReachLocation("Meet the Hall Family"), (ep_shutter if world.options.scoop_sanity else True_())))
 
     world.set_rule(world.multiworld.get_location("Witness Sean in Paradise Plaza", world.player), And(CanReachRegion("Paradise Plaza"), (Or(Has("The Cult"), Has("A Strange Group")) if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
-    world.set_rule(world.multiworld.get_location("Get grabbed by the raincoats", world.player), And(CanReachLocation("Witness Sean in Paradise Plaza"), CanReachRegion("Leisure Park")))
+    world.set_rule(world.multiworld.get_location("Get grabbed by the raincoats", world.player), CanReachLocation("Witness Sean in Paradise Plaza"))
     world.set_rule(world.multiworld.get_location("Meet Sean", world.player), And(CanReachRegion("Colby's Movieland"), (Has("A Strange Group") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM")))))
     world.set_rule(world.multiworld.get_location("Kill Sean", world.player), CanReachLocation("Meet Sean"))
 
@@ -968,8 +977,17 @@ def set_rules(world) -> None:
     world.set_rule(world.multiworld.get_location("Get 50 survivors to join", world.player), And(CanReachRegion("Paradise Plaza"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM"), CanReachLocation("Kill Kent on day 3"), CanReachLocation("Kill Cliff"), CanReachLocation("Kill Jo"), CanReachLocation("Kill Adam"), CanReachLocation("Kill Sean"), CanReachLocation("Kill Roger and Jack (and Thomas if you want) and chat with Wayne"), CanReachLocation("Defeat Paul"), (And(HasAll(*all_side_scoops), ending_a_rule) if world.options.scoop_sanity else True_())))
     world.set_rule(world.multiworld.get_location("Encounter 10 survivors", world.player), And(CanReachRegion("Paradise Plaza"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM"), CanReachLocation("Kill Kent on day 3"), CanReachLocation("Kill Cliff"), CanReachLocation("Kill Jo"), CanReachLocation("Kill Adam"), CanReachLocation("Kill Sean"), CanReachLocation("Kill Roger and Jack (and Thomas if you want) and chat with Wayne"), CanReachLocation("Defeat Paul")))
     world.set_rule(world.multiworld.get_location("Encounter 50 survivors", world.player), And(CanReachRegion("Paradise Plaza"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM"), CanReachLocation("Kill Kent on day 3"), CanReachLocation("Kill Cliff"), CanReachLocation("Kill Jo"), CanReachLocation("Kill Adam"), CanReachLocation("Kill Sean"), CanReachLocation("Kill Roger and Jack (and Thomas if you want) and chat with Wayne"), CanReachLocation("Defeat Paul"), (And(HasAll(*all_side_scoops), ending_a_rule) if world.options.scoop_sanity else True_())))
-    world.set_rule(world.multiworld.get_location("Save 10 survivors", world.player), And(CanReachRegion("Paradise Plaza"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM"), Has("DAY4_12_PM"), CanReachLocation("Kill Kent on day 3"), CanReachLocation("Kill Cliff"), CanReachLocation("Kill Jo"), CanReachLocation("Kill Adam"), CanReachLocation("Kill Sean"), CanReachLocation("Kill Roger and Jack (and Thomas if you want) and chat with Wayne"), CanReachLocation("Defeat Paul"), (And(HasAll(*all_side_scoops), ending_a_rule) if world.options.scoop_sanity else True_())))
-    world.set_rule(world.multiworld.get_location("Save 50 survivors", world.player), And(CanReachRegion("Paradise Plaza"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM"), Has("DAY4_12_PM"), CanReachLocation("Kill Kent on day 3"), CanReachLocation("Kill Cliff"), CanReachLocation("Kill Jo"), CanReachLocation("Kill Adam"), CanReachLocation("Kill Sean"), CanReachLocation("Kill Roger and Jack (and Thomas if you want) and chat with Wayne"), CanReachLocation("Defeat Paul"), (And(HasAll(*all_side_scoops), ending_a_rule) if world.options.scoop_sanity else True_())))
+    _rescue_locs = [CanReachLocation(_l) for _l in world.ALL_RESCUE_LOCATIONS]
+    world.set_rule(world.multiworld.get_location("Rescue 5 survivors", world.player), AtLeast(5, *_rescue_locs))
+    world.set_rule(world.multiworld.get_location("Rescue 10 survivors", world.player), AtLeast(10, *_rescue_locs))
+    world.set_rule(world.multiworld.get_location("Rescue 15 survivors", world.player), AtLeast(15, *_rescue_locs))
+    world.set_rule(world.multiworld.get_location("Rescue 20 survivors", world.player), AtLeast(20, *_rescue_locs))
+    world.set_rule(world.multiworld.get_location("Rescue 25 survivors", world.player), AtLeast(25, *_rescue_locs))
+    world.set_rule(world.multiworld.get_location("Rescue 30 survivors", world.player), AtLeast(30, *_rescue_locs))
+    world.set_rule(world.multiworld.get_location("Rescue 35 survivors", world.player), AtLeast(35, *_rescue_locs))
+    world.set_rule(world.multiworld.get_location("Rescue 40 survivors", world.player), AtLeast(40, *_rescue_locs))
+    world.set_rule(world.multiworld.get_location("Rescue 45 survivors", world.player), AtLeast(45, *_rescue_locs))
+    world.set_rule(world.multiworld.get_location("Rescue 48 survivors", world.player), AtLeast(48, *_rescue_locs))
 
     # Challenge locations default to sphere 0 via the blanket rule above.
     # Falling far enough is awkward to arrange at the start, so this one is
@@ -1147,9 +1165,10 @@ def set_rules(world) -> None:
     # PP Stickers in Security Room
     world.set_rule(world.multiworld.get_location("Photograph PP Sticker 97", world.player), CanReachRegion("Security Room"))
 
-    # PP Stickers in Cultists' Hideout
-    world.set_rule(world.multiworld.get_location("Photograph PP Sticker 98", world.player), And(CanReachRegion("Paradise Plaza"), CanReachRegion("Leisure Park"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation("Get grabbed by the raincoats")))
-    world.set_rule(world.multiworld.get_location("Photograph PP Sticker 99", world.player), And(CanReachRegion("Paradise Plaza"), CanReachRegion("Leisure Park"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation("Get grabbed by the raincoats")))
+    # PP Stickers in Cultists' Hideout. The exit is redirected into Paradise
+    # Plaza, so Leisure Park is no longer needed to get back out.
+    world.set_rule(world.multiworld.get_location("Photograph PP Sticker 98", world.player), And(CanReachRegion("Paradise Plaza"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation("Get grabbed by the raincoats")))
+    world.set_rule(world.multiworld.get_location("Photograph PP Sticker 99", world.player), And(CanReachRegion("Paradise Plaza"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation("Get grabbed by the raincoats")))
 
     # PP Stickers in Rooftop
     world.set_rule(world.multiworld.get_location("Photograph PP Sticker 100", world.player), CanReachRegion("Rooftop"))

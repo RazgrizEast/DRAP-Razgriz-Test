@@ -66,6 +66,27 @@ local function count_rescued()
     return n
 end
 
+-- Milestone checks. Not a Savior feature -- they exist in every mode -- but
+-- this is where the live rescue count lives, so they are sent from here.
+--
+-- 48 is every survivor in the mall. The old "Save 10/50" pair was driven by a
+-- results-screen field, so it only fired at an ending, and 50 was never
+-- reachable at all.
+local RESCUE_MILESTONES = { 5, 10, 15, 20, 25, 30, 35, 40, 45, 48 }
+
+local function send_rescue_milestones()
+    if not (AP and AP.AP_BRIDGE and AP.AP_BRIDGE.check) then return end
+    local n = count_rescued()
+    for _, threshold in ipairs(RESCUE_MILESTONES) do
+        if n >= threshold then
+            -- The bridge dedupes, so re-sending a met milestone is free. That
+            -- is what makes this safe to run on reapply as well as on rescue.
+            pcall(AP.AP_BRIDGE.check,
+                string.format("Rescue %d survivors", threshold))
+        end
+    end
+end
+
 local function is_savior_goal()
     return AP and AP.Goal == GOAL_SAVIOR
 end
@@ -93,6 +114,7 @@ end
 ------------------------------------------------------------
 
 function M.on_survivor_rescued(friendly_name)
+    send_rescue_milestones()
     if not is_savior_goal() then return end
     try_send_goal()
 end
@@ -101,6 +123,10 @@ end
 -- met but the goal check hadn't been sent (e.g. crash between rescue and
 -- send). Idempotent; second sends are harmless.
 function M.reapply()
+    -- Also on reapply, not only per rescue: a run that rescued people before
+    -- connecting has no rescue event left to fire, and the milestones would
+    -- never be sent.
+    send_rescue_milestones()
     if not is_savior_goal() then return end
     try_send_goal()
 end
