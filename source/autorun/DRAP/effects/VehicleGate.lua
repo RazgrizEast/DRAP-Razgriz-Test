@@ -186,8 +186,13 @@ local function install_hooks()
         log.warn("VehicleController not found -- car keys inactive")
         return
     end
-    -- Both Boolean overloads are player-facing; the NPC and enemy ones return
-    -- void and are left alone so survivors and convicts still ride.
+    -- The Boolean overloads are not player-only: they carry a DriverType, and
+    -- enemies board through them too. Refusing Drivin' Carlito his Box Truck
+    -- in the Maintenance Tunnel (no Truck Key yet) left him standing at the
+    -- seat, sunk into the ground. Only the player is gated; Npc and Enemy
+    -- always ride, and anything else is still gated so the player cannot slip
+    -- through on an unexpected value.
+    local DRIVER_NPC, DRIVER_ENEMY = 2, 3
     local n = 0
     for _, sig in ipairs({
         "requestGetOnCar(System.Int32, via.GameObject, app.solid.Vehicle.IVehicleDriverInterface, System.Boolean, app.solid.Vehicle.VehicleController.DriverType)",
@@ -199,6 +204,10 @@ local function install_hooks()
                 sdk.hook(fn,
                     function(args)
                         if not enabled then return end
+                        local driver = safe(function()
+                            return sdk.to_int64(args[7]) & 0xFF
+                        end)
+                        if driver == DRIVER_NPC or driver == DRIVER_ENEMY then return end
                         local this = safe(function()
                             return sdk.to_managed_object(args[2])
                         end)
@@ -206,7 +215,8 @@ local function install_hooks()
                         local item = key_for(this)
                         if not item or has_received(item) then return end
                         say_once("refuse:" .. item,
-                            "refused boarding -- no " .. item)
+                            string.format("refused boarding -- no %s (driver type %s)",
+                                item, tostring(driver)))
                         return sdk.PreHookResult.SKIP_ORIGINAL
                     end,
                     function(retval) return retval end)
