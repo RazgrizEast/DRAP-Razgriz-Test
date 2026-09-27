@@ -585,14 +585,55 @@ local function hold_ep_shutter_flow()
     if not mgr then return end
     local cur = tonumber(Shared.safe(function() return mgr:call("getGameFlow") end))
     if not cur or cur >= EP_SHUTTER_FLOW then return end
-    -- Backup for Brad is mid-flight; let it run its own progression.
-    if cur >= EP_MISSION_FLOW_LO and cur <= EP_MISSION_FLOW_HI then return end
+    -- Backup for Brad is mid-flight; let it run its own progression. Once it
+    -- is done the band is fair game: a save reloaded from before the Odd Old
+    -- Man cutscene comes back at 110, and the Food Court's escort layout
+    -- (uNpc2a, flow 110) places Brad again on every load while it stays there.
+    if cur >= EP_MISSION_FLOW_LO and cur <= EP_MISSION_FLOW_HI
+        and not M.is_scoop_completed("Backup for Brad") then
+        return
+    end
 
     local ok = pcall(function() mgr:call("setGameFlow", EP_SHUTTER_FLOW) end)
     if ok and _flow_logged ~= cur then
         _flow_logged = cur
         M.log(string.format("EP shutters: game flow %d -> %d", cur,
             EP_SHUTTER_FLOW))
+    end
+end
+
+-- The Odd Old Man cutscene puts Brad's escort record (stype 33) to sleep, but
+-- not when A Temporary Agreement was done first, and a save reloaded from
+-- before the cutscene brings the record back awake. NpcManager places any
+-- awake record in the area being loaded, so a second Brad stays in the Food
+-- Court. Once DRAP has Backup for Brad done, a record still in escort is put
+-- to sleep the way the cutscene would. Only escort is touched.
+local BRAD_ESCORT_STYPE = 33
+local LIVE_STATE_ESCORT, LIVE_STATE_SLEEP = 8, 9
+local _brad_record_check_at = 0
+
+local function settle_brad_record()
+    if not scoop_sanity_enabled or not State.is_activated() then return end
+    if State.is_endgame_reached() then return end
+    if os.clock() - _brad_record_check_at < 1.0 then return end
+    _brad_record_check_at = os.clock()
+    if not M.is_scoop_completed("Backup for Brad") then return end
+
+    local mgr = sdk.get_managed_singleton("app.solid.gamemastering.NpcManager")
+    local list = mgr and Shared.safe(function() return mgr:get_field("NpcInfoList") end)
+    if not list then return end
+    for i = 0, (Shared.get_collection_count(list) or 0) - 1 do
+        local info = Shared.get_collection_item(list, i)
+        local stype = info and Shared.to_int(Shared.safe(function()
+            return info:get_field("<Name>k__BackingField") end))
+        if stype == BRAD_ESCORT_STYPE then
+            local state = Shared.to_int(Shared.safe(function() return info:get_field("mLiveState") end))
+            if state == LIVE_STATE_ESCORT then
+                pcall(function() info:call("setLiveState", LIVE_STATE_SLEEP) end)
+                M.log("Brad's escort record was awake after Backup for Brad -- put to sleep")
+            end
+            return
+        end
     end
 end
 
@@ -3269,6 +3310,7 @@ function M.on_frame()
     -- ScoopSanity EP shutters: game-flow floor,
     -- persisted via in-game flags 765/2280.
     hold_ep_shutter_flow()
+    settle_brad_record()
     poll_multi_event_completions()
 
     -- Manage Entrance Plaza door (flag 276) for Rescue the Professor.
