@@ -2096,6 +2096,7 @@ function M.get_all_status()
 end
 
 local EVENT_ITEM_NAMES = nil
+local PROGRESSIVE_KENT = "Progressive Kent Scoop"
 
 local function build_event_item_set()
     EVENT_ITEM_NAMES = {}
@@ -2105,6 +2106,9 @@ local function build_event_item_set()
     for event_name, _ in pairs(MILESTONE_EVENTS) do
         EVENT_ITEM_NAMES[event_name] = true
     end
+    -- Unlocks Kent's days rather than naming a scoop, so it is not in
+    -- SCOOP_DATA, but it is no more spawnable than one.
+    EVENT_ITEM_NAMES[PROGRESSIVE_KENT] = true
 end
 
 function M.is_event_item(name)
@@ -2446,6 +2450,59 @@ function M.save()
     return save_state()
 end
 
+local function receive_scoop_item(scoop_name, sender_name)
+    local data = SCOOP_DATA[scoop_name]
+    if not data then return end
+    M.log(string.format("Received scoop '%s' from %s", tostring(scoop_name), tostring(sender_name or "?")))
+
+    State.mark_ap_received(scoop_name)
+    save_state()
+
+    if data.category == "Main" and State.is_scoop_order_set() then
+        State.try_advance_chain()
+    else
+        M.unlock_scoop(scoop_name)
+    end
+end
+
+-- Progressive Kent Scoop: the Nth copy unlocks Kent's Nth day, so the days
+-- always arrive in order and KentChain never juggles them out of order. A
+-- copy is known by its server item index; replays on reconnect come back
+-- with the same indexes, so each copy keeps its day.
+local kent_progression = { "Cut from the Same Cloth", "Photo Challenge", "Photographer's Pride" }
+local kent_copy_day = {}    -- item index -> day number
+local kent_copies = 0
+
+--- The Kent days this seed plays, in unlock order (slot data).
+function M.set_kent_progression(days)
+    if type(days) == "table" and #days > 0 then
+        kent_progression = {}
+        for i, d in ipairs(days) do kent_progression[i] = tostring(d) end
+    end
+    kent_copy_day = {}
+    kent_copies = 0
+    M.log("Kent progression: " .. table.concat(kent_progression, " -> "))
+end
+
+local function receive_progressive_kent(net_item, sender_name)
+    local index = net_item and tonumber(net_item.index)
+    if index and index < 0 then index = nil end
+    local day_no = index and kent_copy_day[index]
+    if not day_no then
+        kent_copies = kent_copies + 1
+        day_no = kent_copies
+        if index then kent_copy_day[index] = day_no end
+    end
+    local day = kent_progression[day_no]
+    if not day then
+        M.log(string.format("Progressive Kent Scoop #%d from %s -- more copies than Kent days, ignored",
+            day_no, tostring(sender_name or "?")))
+        return
+    end
+    M.log(string.format("Progressive Kent Scoop #%d -> '%s'", day_no, day))
+    receive_scoop_item(day, sender_name)
+end
+
 function M.register_with_ap_bridge(ap_bridge)
     if not ap_bridge or not ap_bridge.register_item_handler_by_name then
         M.log("ERROR: Invalid AP bridge")
@@ -2453,24 +2510,18 @@ function M.register_with_ap_bridge(ap_bridge)
     end
 
     local count = 0
-    for scoop_name, data in pairs(SCOOP_DATA) do
+    for scoop_name, _ in pairs(SCOOP_DATA) do
         ap_bridge.register_item_handler_by_name(scoop_name, function(net_item, item_name, sender_name)
-            M.log(string.format("Received scoop '%s' from %s", tostring(item_name), tostring(sender_name or "?")))
-
-            State.mark_ap_received(scoop_name)
-            save_state()
-
-            if data.category == "Main" and State.is_scoop_order_set() then
-                State.try_advance_chain()
-            else
-                M.unlock_scoop(scoop_name)
-            end
+            receive_scoop_item(scoop_name, sender_name)
         end)
         count = count + 1
     end
+    ap_bridge.register_item_handler_by_name(PROGRESSIVE_KENT, function(net_item, item_name, sender_name)
+        receive_progressive_kent(net_item, sender_name)
+    end)
 
-    M.log(string.format("Registered %d scoop handlers with AP bridge", count))
-    return count
+    M.log(string.format("Registered %d scoop handlers with AP bridge", count + 1))
+    return count + 1
 end
 
 local filter_category = "All"

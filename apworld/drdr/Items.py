@@ -347,10 +347,8 @@ _all_items = [DRItemData(row[0], row[1], row[2]) for row in [
     ("The Woman Left Behind", 3115, DRItemCategory.SCOOP),
     ("A Woman in Despair", 3116, DRItemCategory.SCOOP),
 
-    # Psychopath Scoops
-    ("Cut from the Same Cloth", 3200, DRItemCategory.SCOOP),
-    ("Photo Challenge", 3201, DRItemCategory.SCOOP),
-    ("Photographer's Pride", 3202, DRItemCategory.SCOOP),
+    # Psychopath Scoops. 3200-3202 were Kent's three days, now Progressive
+    # Kent Scoop below; the ids stay retired.
     ("Cletus", 3203, DRItemCategory.SCOOP),
     ("The Convicts", 3204, DRItemCategory.SCOOP),
     ("Out of Control", 3205, DRItemCategory.SCOOP),
@@ -360,6 +358,9 @@ _all_items = [DRItemData(row[0], row[1], row[2]) for row in [
     ("Long Haired Punk", 3209, DRItemCategory.SCOOP),
     ("Mark of the Sniper", 3210, DRItemCategory.SCOOP),
     ("The Cult", 3211, DRItemCategory.SCOOP),
+    # Kent's three days come as copies of this under ScoopSanity: the Nth
+    # copy unlocks day N, so the days always arrive in order.
+    ("Progressive Kent Scoop", 3212, DRItemCategory.SCOOP),
 
     # Player skills (21) — handled by DRAP/effects/PlayerStats.lua
     # Each maps to a bit in PSM.PlayerSkill (PL_SKILL_BITS).
@@ -537,10 +538,10 @@ spitter_kept_weapons = {
     "Queen",
 }
 
-# Scoops with nothing left to open once Spitter Only drops their checks.
-spitter_dropped_scoops = {
-    "Photo Challenge",      # arms Kent's day 2, which needs a novelty mask
-}
+# Kent's days, in the order the Progressive Kent Scoop copies unlock them.
+PROGRESSIVE_KENT = "Progressive Kent Scoop"
+KENT_DAYS = ["Cut from the Same Cloth", "Photo Challenge", "Photographer's Pride"]
+
 
 # Upgrades with nothing to improve once the weapons are gone. Melee is meant
 # to be barely worth swinging in this mode, and there is nothing left to
@@ -791,6 +792,9 @@ def BuildItemPool(multiworld, count, options, excluded_scoop_names=(),
     if options.scoop_sanity:
         excluded = set(excluded_scoop_names)
         for scoop in scoopList:
+            # Kent's days go in below as Progressive Kent Scoop copies.
+            if scoop.name in KENT_DAYS or scoop.name == PROGRESSIVE_KENT:
+                continue
             # Skip "Out of Control" if door randomizer is also enabled (it's precollected for softlock prevention)
             if options.door_randomizer and scoop.name == "Out of Control":
                 continue
@@ -798,10 +802,14 @@ def BuildItemPool(multiworld, count, options, excluded_scoop_names=(),
             # under the Savior goal).
             if scoop.name in excluded:
                 continue
-            if spitter_only and scoop.name in spitter_dropped_scoops:
-                continue
             item = item_dictionary[scoop.name]
             item_pool.append(item)
+            remaining_count = remaining_count - 1
+            included_itemcount = included_itemcount + 1
+        for day in KENT_DAYS:
+            if day in excluded:
+                continue
+            item_pool.append(item_dictionary[PROGRESSIVE_KENT])
             remaining_count = remaining_count - 1
             included_itemcount = included_itemcount + 1
 

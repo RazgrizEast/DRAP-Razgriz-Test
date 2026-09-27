@@ -7,7 +7,7 @@ from Options import OptionError, item_and_loc_options
 
 from worlds.AutoWorld import World, WebWorld
 
-from .Items import DRItem, DRItemCategory, item_dictionary, key_item_names, item_descriptions, BuildItemPool, specialty_items, progression_skills, microwave_food_items, challenge_tool_items, kill_filler_items
+from .Items import DRItem, DRItemCategory, item_dictionary, key_item_names, item_descriptions, BuildItemPool, specialty_items, progression_skills, microwave_food_items, challenge_tool_items, kill_filler_items, KENT_DAYS, PROGRESSIVE_KENT
 from .Locations import kill_sanity_location_groups
 from .Locations import (DRLocation, DRLocationCategory, location_tables,
                         location_dictionary, ZOMBIE_KILL_TIERS,
@@ -77,7 +77,9 @@ def _validate_shared_scoops() -> None:
             s.get("category") in ("Survivor", "Psychopath")
             or (s.get("category") == "Main" and s.get("chain_eligible"))
         )
-        if needs_item and name not in all_items:
+        # Kent's days arrive as Progressive Kent Scoop copies instead.
+        item = PROGRESSIVE_KENT if name in KENT_DAYS else name
+        if needs_item and item not in all_items:
             problems.append(f"scoop '{name}' is not an item in Items.py")
         event = s.get("completion_event")
         if event and event not in all_locations:
@@ -158,11 +160,6 @@ SPITTER_EXCLUDED_LOCATIONS = {
     "Heat a pan on the Stove in That's a Spicy Meatball!",
     "Heat a pan on the Stove in Colombian Roastmasters - Al Fresca Plaza",
     "Heat a pan on all stoves",
-    # Kent's day 2 shoot wants Frank in a novelty mask. His day 1 and day 3
-    # are untouched -- ScoopSanity arms all three independently, so losing
-    # day 2 does not stall the chain or Tad behind it.
-    "Meet Kent on day 2",
-    "Complete Kent's day 2 photoshoot",
     # The helicopter has to be SHOT down, and spit does not reach it. The
     # soldiers still leave: the runtime drops this from the Special Forces
     # scoop's completion set under this mode, so killing ten of them is the
@@ -261,8 +258,6 @@ class DRWorld(World):
             # still full of weapons to pick up and an empty pool changes
             # nothing.
             self.options.restricted_item_mode.value = 1
-            # ScoopSanity keeps Kent's three days independent, so dropping his
-            # day 2 costs day 2 and nothing behind it.
             self.options.scoop_sanity.value = 1
             # Paul cannot be rescued without an extinguisher, so the Savior
             # goal must not be able to ask for all 48.
@@ -1343,6 +1338,8 @@ class DRWorld(World):
             "kill_sanity": self.kill_sanity_tops,
             "zombie_kill_thresholds": zombie_kill_thresholds,
             "scoop_order": self.scoop_order if scoop_sanity_enabled else {},
+            # The Kent day each Progressive Kent Scoop copy unlocks, in order.
+            "kent_progression": KENT_DAYS if scoop_sanity_enabled else [],
             # Player-stats slot data (read by Lua on slot connect)
             "vanilla_progression": vanilla_progression_value,
             "trap_percentage": trap_percentage,

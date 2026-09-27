@@ -102,9 +102,15 @@ class SpitterOnly(Toggle):
 
     The checks that are nothing but a weapon -- the bullet counts, bowling,
     golf, the parasol and the RPG -- are dropped, since no amount of spitting
-    finishes them. A few things that happen to be weapons stay in: the fire
-    extinguisher Paul is waiting on, Kent's masks, the frying pan the stoves
-    need and Isabela's queen.
+    finishes them. So are the ones that need a weapon in hand: the stoves (a
+    frying pan) and rescuing Paul (an extinguisher). Isabela's queen stays in
+    the pool.
+
+    Kent's day 2 photoshoot wants an outtake photo taken before you talk to
+    him, and with no masked zombies to shoot it has to come from a scoop:
+    Ronald right after you meet him, Gil right after you meet him, or Paul
+    once he is beaten. Each shot is offered only once, so take it and keep
+    it. Under the Psycho goal, Paul's is the only one.
     """
     display_name = "Spitter Only"
     default = False

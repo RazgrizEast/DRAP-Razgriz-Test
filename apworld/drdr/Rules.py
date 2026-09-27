@@ -24,6 +24,7 @@ from .shared_data import (
     SCOOP_COMPLETION_MAP, SCOOP_EVENTS, SCOOP_REGION_REQUIREMENTS,
     SCOOP_SPLIT_KEY_DOORS as SPLIT_KEY_SCOOP_DOORS,
 )
+from .Items import KENT_DAYS, PROGRESSIVE_KENT
 
 
 # Level requirements for each main scoop position (0-indexed) in the shuffled order.
@@ -390,6 +391,11 @@ def set_rules(world) -> None:
     # failing.
     _dropped = (world.SPITTER_EXCLUDED_LOCATIONS if world.spitter_only
                 else frozenset())
+
+    # Kent's days come as copies of Progressive Kent Scoop: day N needs N of
+    # them.
+    def _kent_day(day):
+        return Has(PROGRESSIVE_KENT, KENT_DAYS.index(day) + 1)
 
     # --------------------------------------------------------------------
     # Shared gates
@@ -1053,7 +1059,7 @@ def set_rules(world) -> None:
     world.set_rule(_survivor_location(world, "Rescue Pamela Tompkins"), And(CanReachRegion("Paradise Plaza"), (Has("Twin Sisters") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation(_survivor_name(world, "Rescue Ross Folk")), CanReachLocation(_survivor_name(world, "Rescue Tonya Waters"))))))
     world.set_rule(_survivor_location(world, "Rescue Ronald Shiner"), And(CanReachRegion("Paradise Plaza"), (Has("Orange Juice") if world.options.restricted_item_mode else True_()), (Has("Restaurant Man") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
     world.set_rule(_survivor_location(world, "Rescue Jennifer Gorman"), And(CanReachRegion("Paradise Plaza"), (Has("The Cult") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
-    world.set_rule(_survivor_location(world, "Rescue Tad Hawthorne"), And(CanReachRegion("Paradise Plaza"), CanReachLocation("Kill Kent on day 3"), (Has("Photographer's Pride") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM")))))
+    world.set_rule(_survivor_location(world, "Rescue Tad Hawthorne"), And(CanReachRegion("Paradise Plaza"), CanReachLocation("Kill Kent on day 3"), (_kent_day("Photographer's Pride") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM")))))
     world.set_rule(_survivor_location(world, "Rescue Simone Ravendark"), And(CanReachRegion("Paradise Plaza"), (Has("A Woman in Despair") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM"), CanReachLocation("Complete Santa Cabeza")))))
     ## 1.1.0 HAS A BUG WITH "Rescue Simone Ravendark", THIS NEXT LINE EXCLUDES THIS CHECK IN ALL PLAY MODES AND SHOULD BE REMOVED UPON FIX BEING IMPLEMENTED
     _survivor_location(world, "Rescue Simone Ravendark").progress_type = LocationProgressType.EXCLUDED
@@ -1170,17 +1176,34 @@ def set_rules(world) -> None:
     world.set_rule(world.multiworld.get_location("Meet Paul", world.player), And(CanReachRegion("Wonderland Plaza"), (Has("Long Haired Punk") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM")))))
     world.set_rule(world.multiworld.get_location("Defeat Paul", world.player), CanReachLocation("Meet Paul"))
 
-    # Kent's three days are INDEPENDENT under ScoopSanity. KentChain arms each
-    # day's measured start set and clears the other days' residue, so any order
-    # works in game -- each location needs only its OWN scoop item and Paradise
+    # Kent's days arrive in order under ScoopSanity, as copies of Progressive
+    # Kent Scoop, so each day's locations need that many copies and Paradise
     # Plaza. Without ScoopSanity the vanilla schedule applies, so the days stay
     # chained on each other and on their time keys.
-    world.set_rule(world.multiworld.get_location("Meet Kent on day 1", world.player), And(CanReachRegion("Paradise Plaza"), (Has("Cut from the Same Cloth") if world.options.scoop_sanity else True_())))
+    world.set_rule(world.multiworld.get_location("Meet Kent on day 1", world.player), And(CanReachRegion("Paradise Plaza"), (_kent_day("Cut from the Same Cloth") if world.options.scoop_sanity else True_())))
     world.set_rule(world.multiworld.get_location("Complete Kent's day 1 photoshoot", world.player), CanReachLocation("Meet Kent on day 1"))
-    if "Meet Kent on day 2" not in _dropped:
-        world.set_rule(world.multiworld.get_location("Meet Kent on day 2", world.player), And(CanReachRegion("Paradise Plaza"), (Or(Has("Novelty Mask (Bear)"), Has("Novelty Mask (Servbot)"), Has("Novelty Mask (Horse)"), And(Has("Novelty Mask (Ghoul)"), CanReachRegion("Entrance Plaza"))) if world.options.restricted_item_mode else True_()), (Has("Photo Challenge") if world.options.scoop_sanity else And(CanReachLocation("Complete Kent's day 1 photoshoot"), Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
-        world.set_rule(world.multiworld.get_location("Complete Kent's day 2 photoshoot", world.player), CanReachLocation("Meet Kent on day 2"))
-    world.set_rule(world.multiworld.get_location("Meet Kent on day 3", world.player), And(CanReachRegion("Paradise Plaza"), (Has("Photographer's Pride") if world.options.scoop_sanity else And(CanReachLocation("Complete Kent's day 2 photoshoot"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM")))))
+    # Day 2's shoot wants an OUTTAKE photo worth 500 PP, taken before Frank
+    # talks to Kent. A novelty mask on a zombie is the usual way, but Spitter
+    # Only cannot put one on. Three scoops
+    # hand the player a shot instead: Ronald right after meeting him, Gil right
+    # after meeting him, and Paul once he is beaten. Ronald and Gil turn
+    # hostile in Psycho. Without ScoopSanity the shoot is at noon on day 2,
+    # and Gil and Paul only appear on day 3, so only Ronald is in time.
+    _outtake = [] if world.spitter_only else [
+        Has("Novelty Mask (Bear)"), Has("Novelty Mask (Servbot)"), Has("Novelty Mask (Horse)"),
+        And(Has("Novelty Mask (Ghoul)"), CanReachRegion("Entrance Plaza")),
+    ]
+    if not world.psycho_mode:
+        _outtake.append(And(CanReachRegion("Paradise Plaza"),
+                            Has("Restaurant Man") if world.options.scoop_sanity
+                            else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"))))
+    if world.options.scoop_sanity:
+        _outtake.append(CanReachLocation("Defeat Paul"))
+        if not world.psycho_mode:
+            _outtake.append(And(CanReachRegion("Food Court"), Has("The Drunkard")))
+    world.set_rule(world.multiworld.get_location("Meet Kent on day 2", world.player), And(CanReachRegion("Paradise Plaza"), (Or(*_outtake) if world.options.restricted_item_mode else True_()), (_kent_day("Photo Challenge") if world.options.scoop_sanity else And(CanReachLocation("Complete Kent's day 1 photoshoot"), Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
+    world.set_rule(world.multiworld.get_location("Complete Kent's day 2 photoshoot", world.player), CanReachLocation("Meet Kent on day 2"))
+    world.set_rule(world.multiworld.get_location("Meet Kent on day 3", world.player), And(CanReachRegion("Paradise Plaza"), (_kent_day("Photographer's Pride") if world.options.scoop_sanity else And(CanReachLocation("Complete Kent's day 2 photoshoot"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM")))))
     world.set_rule(world.multiworld.get_location("Kill Kent on day 3", world.player), CanReachLocation("Meet Kent on day 3"))
 
     # Psychopath encounter / photograph / kill lists.
@@ -1329,18 +1352,16 @@ def set_rules(world) -> None:
     world.set_rule(world.multiworld.get_location("Reach max level", world.player), CanReachLocation("Reach Level 50"))
     world.set_rule(world.multiworld.get_location("Kill 500 zombies by vehicle", world.player), _kill_rule)
     world.set_rule(world.multiworld.get_location("Kill 1000 zombies by vehicle", world.player), _kill_rule)
-    all_side_scoops = SURVIVOR_SCOOP_NAMES + PSYCHOPATH_SCOOP_NAMES
-    if world.spitter_only:
-        # Photo Challenge arms Kent's day 2, which this mode drops, so the
-        # item is not in the pool and cannot be part of "the story is done".
-        all_side_scoops = [_s for _s in all_side_scoops
-                           if _s != "Photo Challenge"]
+    # Kent's days are Progressive Kent Scoop copies, one per day.
+    all_side_scoops = [_s for _s in SURVIVOR_SCOOP_NAMES + PSYCHOPATH_SCOOP_NAMES
+                       if _s not in KENT_DAYS]
+    all_side_scoops_rule = And(HasAll(*all_side_scoops), Has(PROGRESSIVE_KENT, len(KENT_DAYS)))
     # Needs survivors alive and willing to follow, which Psycho does
     # not allow. create_region drops these, so do not rule them either.
     if not world.psycho_mode:
-        world.set_rule(world.multiworld.get_location("Get 50 survivors to join", world.player), And(CanReachRegion("Paradise Plaza"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM"), CanReachLocation("Kill Kent on day 3"), CanReachLocation("Kill Cliff"), CanReachLocation("Kill Jo"), CanReachLocation("Kill Adam"), CanReachLocation("Kill Sean"), CanReachLocation("Kill Roger and Jack (and Thomas if you want) and chat with Wayne"), CanReachLocation("Defeat Paul"), (And(HasAll(*all_side_scoops), ending_a_rule) if world.options.scoop_sanity else True_())))
+        world.set_rule(world.multiworld.get_location("Get 50 survivors to join", world.player), And(CanReachRegion("Paradise Plaza"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM"), CanReachLocation("Kill Kent on day 3"), CanReachLocation("Kill Cliff"), CanReachLocation("Kill Jo"), CanReachLocation("Kill Adam"), CanReachLocation("Kill Sean"), CanReachLocation("Kill Roger and Jack (and Thomas if you want) and chat with Wayne"), CanReachLocation("Defeat Paul"), (And(all_side_scoops_rule, ending_a_rule) if world.options.scoop_sanity else True_())))
     world.set_rule(world.multiworld.get_location("Encounter 10 survivors", world.player), And(CanReachRegion("Paradise Plaza"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM"), CanReachLocation("Kill Kent on day 3"), CanReachLocation("Kill Cliff"), CanReachLocation("Kill Jo"), CanReachLocation("Kill Adam"), CanReachLocation("Kill Sean"), CanReachLocation("Kill Roger and Jack (and Thomas if you want) and chat with Wayne"), CanReachLocation("Defeat Paul")))
-    world.set_rule(world.multiworld.get_location("Encounter 50 survivors", world.player), And(CanReachRegion("Paradise Plaza"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM"), CanReachLocation("Kill Kent on day 3"), CanReachLocation("Kill Cliff"), CanReachLocation("Kill Jo"), CanReachLocation("Kill Adam"), CanReachLocation("Kill Sean"), CanReachLocation("Kill Roger and Jack (and Thomas if you want) and chat with Wayne"), CanReachLocation("Defeat Paul"), (And(HasAll(*all_side_scoops), ending_a_rule) if world.options.scoop_sanity else True_())))
+    world.set_rule(world.multiworld.get_location("Encounter 50 survivors", world.player), And(CanReachRegion("Paradise Plaza"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM"), CanReachLocation("Kill Kent on day 3"), CanReachLocation("Kill Cliff"), CanReachLocation("Kill Jo"), CanReachLocation("Kill Adam"), CanReachLocation("Kill Sean"), CanReachLocation("Kill Roger and Jack (and Thomas if you want) and chat with Wayne"), CanReachLocation("Defeat Paul"), (And(all_side_scoops_rule, ending_a_rule) if world.options.scoop_sanity else True_())))
     # The rescue ladder, or the kill ladder in its place. Only one of the two
     # sets of locations exists in a seed, and both count to the same numbers.
     if world.psycho_mode:
