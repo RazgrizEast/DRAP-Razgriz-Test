@@ -3,7 +3,7 @@ import re
 from typing import Any, ClassVar, Dict, Set, List
 
 from BaseClasses import MultiWorld, Region, Item, Entrance, Tutorial, ItemClassification
-from Options import OptionError
+from Options import OptionError, item_and_loc_options
 
 from worlds.AutoWorld import World, WebWorld
 
@@ -205,6 +205,19 @@ class DRWeb(WebWorld):
     tutorials = [setup_en]
 
     option_groups = dr_option_groups
+
+
+def _stock_position(option):
+    for index, stock in enumerate(item_and_loc_options):
+        if issubclass(option, stock):
+            return index
+    return len(item_and_loc_options)
+
+
+# Each location picker takes the place of the stock option it extends.
+for _group in DRWeb.option_groups:
+    if _group.name == "Item & Location Options":
+        _group.options.sort(key=_stock_position)
 
 
 class DRWorld(World):

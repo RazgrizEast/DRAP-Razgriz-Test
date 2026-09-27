@@ -1000,4 +1000,17 @@ dr_option_groups = [
             DLCOutfitsEnabled,
         ],
     ),
+    # The location pickers replace the stock classes, and Archipelago files
+    # this section by class, so without this they fell to the top of Game
+    # Options. It appends the stock options after these; DRWeb sorts them
+    # back into the stock order.
+    OptionGroup(
+        "Item & Location Options",
+        [
+            DRStartLocationHints,
+            DRExcludeLocations,
+            DRPriorityLocations,
+        ],
+        True,
+    ),
 ]
