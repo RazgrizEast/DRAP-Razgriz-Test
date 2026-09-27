@@ -333,33 +333,45 @@ end
 -- Leaving first gives the cleanup the time it needs, and the scheduler
 -- places Kent on a fresh entry every time.
 --
--- "Really left" is a load screen (is_in_game going false then true) that
--- ends in an area other than 512, then a moment there. A cutscene can move
--- the area index without a load, and must not count.
-local PARADISE_AREA = 512
+-- "Really left" is the loaded scene (AreaManager.CurrentLevelPath) being
+-- somewhere other than Paradise Plaza, for a moment. is_in_game is no use
+-- here: a door load does not clear it (twice in 124 loads, save load and
+-- quit). A cutscene can move the area index but not the scene.
+local PARADISE_SCENE = "s200"
+local TITLE_SCENE = "s140"
 local OUTSIDE_SETTLE = 2.0
-local saw_load = false            -- a load screen since the player was last in 512
-local outside_since = nil         -- os.clock() when a real stay outside began
+local outside_since = nil         -- os.clock() when the stay outside began
 local outside_wait_logged = nil   -- day name the "waiting" line was logged for
 
+local function current_level()
+    local am = am_mgr:get()
+    if not am then return nil end
+    local path = Shared.safe(function() return am:get_field("CurrentLevelPath") end)
+    path = path and tostring(path) or ""
+    return path ~= "" and path or nil
+end
+
 local function track_outside()
-    if not Shared.is_in_game() then
-        saw_load = true
+    local level = Shared.is_in_game() and current_level() or nil
+    if not level or level:find(TITLE_SCENE, 1, true) or level:find(PARADISE_SCENE, 1, true) then
         outside_since = nil
         return
     end
-    local a = current_area()
-    if a == nil then return end
-    if a == PARADISE_AREA then
-        saw_load = false
-        outside_since = nil
-    elseif saw_load then
-        outside_since = outside_since or os.clock()
-    end
+    outside_since = outside_since or os.clock()
 end
 
+-- Console switch for the gate above (drap_kent_gate). Off arms a day
+-- wherever the player is.
+local outside_gate_on = true
+
 local function outside_paradise()
+    if not outside_gate_on then return true end
     return outside_since ~= nil and os.clock() - outside_since >= OUTSIDE_SETTLE
+end
+
+_G.drap_kent_gate = function(on)
+    if on ~= nil then outside_gate_on = (on == true) end
+    M.log("outside-Paradise gate " .. (outside_gate_on and "ON" or "OFF (arms in place)"))
 end
 
 local function note_waiting(name)
@@ -1078,12 +1090,8 @@ local function trace_tick()
 end
 
 re.on_frame(function()
-    -- The load-screen watch has to live here. The main loop only ticks
-    -- modules while in game, so M.on_frame never saw a load screen: saw_load
-    -- stayed false, no stay outside Paradise ever counted, and every Kent
-    -- day waited forever (2026-09-25 log: Photographer's Pride received,
-    -- "waits for the player to leave Paradise Plaza", never armed despite
-    -- several Warehouse to Paradise round trips).
+    -- The outside-Paradise watch runs here rather than in M.on_frame, so it
+    -- keeps watching whatever the main loop is doing.
     pcall(track_outside)
     if not scoop_sanity_on() then return end
     pcall(trace_tick)
@@ -1435,7 +1443,7 @@ _G.drap_kent_chain = function()
         .. " desired=" .. tostring(desired_day())
         .. " area=" .. tostring(current_area())
         .. " outside_ok=" .. tostring(outside_paradise())
-        .. " saw_load=" .. tostring(saw_load))
+        .. " level=" .. tostring(current_level()))
     if su then
         for i, name in ipairs(DAYS) do
             local r = pcall(su.has_received_scoop, name) and su.has_received_scoop(name)
