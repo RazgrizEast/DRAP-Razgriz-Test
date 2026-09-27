@@ -52,6 +52,7 @@
 -- uuid, and applying one sets a flag the hook honours.
 
 local Shared = require("DRAP/Shared")
+local PlayerReady = require("DRAP/PlayerReady")
 
 local M = Shared.create_module("KnockbackLink")
 M:set_throttle(0.1)
@@ -107,6 +108,14 @@ local hook_installed = false
 
 local applying_received = false
 local pending = {}             -- written by the hook, drained on the frame
+
+-- Received knockbacks that arrived mid-cutscene, mid-load or while Frank was
+-- driving. They play once he is back on foot, one at a time, and only the
+-- last few are kept so a long cutscene can't queue a string of knockdowns.
+local MAX_HELD = 3
+local RELEASE_GAP = 1.5
+local held = {}
+local next_release = 0
 
 -- Log what every hit was judged to be, without sending anything.
 local watching = false
@@ -317,7 +326,28 @@ function M.apply_received(value, source)
         return
     end
     if type(value) ~= "table" then return end
-    take_knockback(value.x, value.y, value.z, source)
+    if #held == 0 and PlayerReady.ready() then
+        take_knockback(value.x, value.y, value.z, source)
+        return
+    end
+    held[#held + 1] = { x = value.x, y = value.y, z = value.z, source = source }
+    local dropped = ""
+    if #held > MAX_HELD then
+        table.remove(held, 1)
+        dropped = ", oldest dropped"
+    end
+    M.log(string.format("knockback from %s held (%s) -- %d waiting%s",
+        tostring(source or "someone"), PlayerReady.blocked_by(), #held, dropped))
+end
+
+local function release_held()
+    if #held == 0 or not PlayerReady.ready() then return end
+    local now = os.clock()
+    if now < next_release then return end
+    next_release = now + RELEASE_GAP
+    local k = table.remove(held, 1)
+    M.log(string.format("releasing a held knockback (%d still waiting)", #held))
+    take_knockback(k.x, k.y, k.z, k.source)
 end
 
 ------------------------------------------------------------
@@ -330,6 +360,7 @@ function M.set_enabled(on)
         install_hook()
     else
         pending = {}
+        held = {}
     end
     M.log("KnockbackLink " .. (enabled and "on" or "off"))
 end
@@ -343,6 +374,7 @@ function M.on_frame()
 
     install_hook()
     drain()
+    release_held()
 end
 
 ------------------------------------------------------------
@@ -360,6 +392,12 @@ end
 _G.drap_knockback_take = function(x, y, z)
     take_knockback(tonumber(x) or 2.0, tonumber(y) or 0.0, tonumber(z) or 0.0,
                    "console")
+end
+
+--- Receive a knockback through the real path, holding and all, to test the
+--- deferral offline. Needs the link on: drap_knockbacklink(true).
+_G.drap_knockback_receive = function(x, z)
+    M.apply_received({ x = tonumber(x) or 2.0, y = 0.0, z = tonumber(z) or 0.0 }, "console")
 end
 
 --- Fire one of each reaction in turn, so all five can be seen back to back.
@@ -381,10 +419,11 @@ end
 
 _G.drap_knockback_status = function()
     M.log(string.format(
-        "enabled=%s hooked=%s watching=%s queued=%d  reaction now=%s  "
+        "enabled=%s hooked=%s watching=%s queued=%d held=%d (%s)  reaction now=%s  "
         .. "min hit=%d  cooldown=%.2fs",
         tostring(enabled), tostring(hook_installed), tostring(watching),
-        #pending, tostring(current_reaction()), MIN_HIT_DAMAGE, SEND_COOLDOWN))
+        #pending, #held, PlayerReady.blocked_by(), tostring(current_reaction()),
+        MIN_HIT_DAMAGE, SEND_COOLDOWN))
 end
 
 return M

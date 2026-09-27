@@ -335,6 +335,9 @@ local function install_hook()
             area_jump_method,
             -- Pre-hook: intercept and potentially redirect
             function(args)
+                -- When a door was last used, so anything that must not land
+                -- mid-load (PlayerReady) can tell a load screen is coming.
+                M.last_jump_at = os.clock()
                 pcall(function()
                     local hit_data_arg = args[3]
                     if not hit_data_arg then return end

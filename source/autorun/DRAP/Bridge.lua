@@ -353,10 +353,10 @@ local function handle_bounced(json_rows)
 
     M.log("DeathLink received: " .. tostring(cause))
 
-    if _G.AP and _G.AP.DeathLink and _G.AP.DeathLink.kill_player then
-        pcall(_G.AP.DeathLink.kill_player, "DeathLink: " .. tostring(cause))
+    if _G.AP and _G.AP.DeathLink and _G.AP.DeathLink.receive then
+        pcall(_G.AP.DeathLink.receive, "DeathLink: " .. tostring(cause))
     else
-        M.log("DeathLink received, but AP.DeathLink.kill_player unavailable")
+        M.log("DeathLink received, but AP.DeathLink.receive unavailable")
     end
 end
 
