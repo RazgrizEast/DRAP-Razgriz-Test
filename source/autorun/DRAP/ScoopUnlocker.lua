@@ -1891,6 +1891,16 @@ function M.unlock_scoop(scoop_name)
     return State.request_unlock(scoop_name)
 end
 
+-- Parked unlocks go out in the order the multiworld granted them, the same
+-- rule conflict groups use. Alphabetical let Cletus take the gun shop from a
+-- Gun Shop Standoff received earlier and already running, and the reconciler
+-- then forced its start flags off (2026-09-26, Rippe's relaunch).
+local function by_receipt(a, b)
+    local sa, sb = State.receipt_seq(a) or math.huge, State.receipt_seq(b) or math.huge
+    if sa ~= sb then return sa < sb end
+    return a < b
+end
+
 local function update_world_stability()
     if is_player_session() and Shared.is_in_game() then
         world_stable_since = world_stable_since or os.clock()
@@ -1908,7 +1918,7 @@ local function update_world_stability()
     if next(pending_world_unlocks) then
         local names = {}
         for n in pairs(pending_world_unlocks) do table.insert(names, n) end
-        table.sort(names)
+        table.sort(names, by_receipt)
         pending_world_unlocks = {}
         for _, n in ipairs(names) do
             M.log(string.format("World stable -- applying parked unlock '%s'", n))
@@ -1918,7 +1928,7 @@ local function update_world_stability()
     if next(pending_brad_unlocks) and not brad_still_leaving() then
         local names = {}
         for n in pairs(pending_brad_unlocks) do table.insert(names, n) end
-        table.sort(names)
+        table.sort(names, by_receipt)
         pending_brad_unlocks = {}
         for _, n in ipairs(names) do
             M.log(string.format("Brad has left -- applying parked unlock '%s'", n))
@@ -1931,7 +1941,7 @@ local function update_world_stability()
         for n, area in pairs(pending_area_unlocks) do
             if here ~= nil and here ~= area then table.insert(names, n) end
         end
-        table.sort(names)
+        table.sort(names, by_receipt)
         for _, n in ipairs(names) do
             pending_area_unlocks[n] = nil
             M.log(string.format("Player left the vehicle's area -- applying parked unlock '%s'", n))

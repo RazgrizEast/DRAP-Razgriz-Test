@@ -723,6 +723,12 @@ end
 -- AP item receipt / activation / milestones
 ------------------------------------------------------------
 
+--- The order the multiworld granted this scoop in this session (replay on
+--- connect rebuilds it in server order), or nil if never received.
+function M.receipt_seq(scoop_name)
+    return ap_receipt_seq[scoop_name]
+end
+
 function M.mark_ap_received(scoop_name)
     if not ap_receipt_seq[scoop_name] then
         ap_receipt_counter = ap_receipt_counter + 1
