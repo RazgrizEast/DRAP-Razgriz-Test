@@ -272,62 +272,38 @@ end
 -- prompt-driven toast and nothing fires twice.
 ------------------------------------------------------------
 
--- Where the hint speaks from. Eight metres around a landing-spot anchor
--- with no height check fired it from a balcony a floor above the door
--- (tester report). Now the door's own trigger is used when DoorSceneLock
--- has recorded it: the engine's interaction point with its cylinder, the
--- same volume the engine prompts from, plus a small margin. Anchors are
--- only the fallback, at 2 metres on the plane and 1 metre of height.
+-- Where the hint speaks from: the door's own spot, the same per-door
+-- positions the door randomizer lands the player on. Eight metres with no
+-- height check fired it from a balcony a floor above the door; the engine's
+-- area-hit triggers that replaced it (3e5ba58) were worse -- they include
+-- event and tutorial entries that name a destination, so the Wonderland
+-- message came up by the Food Court crates, and the real doors are mostly
+-- rectangles with radius 0, which left their hint half a metre wide.
 --
 -- The Food Court's tunnel and Wonderland doorways are only 8.8 apart, so
 -- the nearest wins rather than the first in range.
-local TRIGGER_MARGIN = 0.5           -- metres beyond the door's own radius
-local TRIGGER_MIN_HEIGHT = 1.0       -- band when the cylinder has no height
-local ANCHOR_RADIUS_SQ = 2.0 * 2.0
-local ANCHOR_HEIGHT_BAND = 1.0
-
---- The recorded trigger for this anchor's vanilla door, nearest to the
---- player if the destination has more than one door.
-local function trigger_for(scene, anchor, px, pz)
-    local lock = _G.AP and _G.AP.DoorSceneLock
-    if not (lock and lock.door_triggers) then return nil end
-    local to_code = NAME_TO_SCENE_CODE[anchor.vanilla]
-    if not to_code then return nil end
-    local best, best_d2 = nil, math.huge
-    for _, t in ipairs(lock.door_triggers(scene)) do
-        if t.to == to_code then
-            local dx, dz = px - t.x, pz - t.z
-            local d2 = dx * dx + dz * dz
-            if d2 < best_d2 then best, best_d2 = t, d2 end
-        end
-    end
-    return best
-end
+local anchor_radius = 3.0            -- metres on the plane (drap_door_hint_radius)
+local ANCHOR_HEIGHT_BAND = 1.5
 
 local function nearest_anchor(scene, px, py, pz)
     local list = scene and _state.anchors_by_scene[scene] or nil
     if not list then return nil end
     local best, best_d2 = nil, math.huge
+    local reach2 = anchor_radius * anchor_radius
     for _, anchor in ipairs(list) do
-        local t = trigger_for(scene, anchor, px, pz)
-        local d2, within
-        if t then
-            local dx, dz = px - t.x, pz - t.z
-            d2 = dx * dx + dz * dz
-            local reach = (t.radius or 0) + TRIGGER_MARGIN
-            local band = math.max(t.height or 0, TRIGGER_MIN_HEIGHT)
-            within = d2 <= reach * reach
-                and (py == nil or math.abs(py - t.y) <= band)
-        else
-            local dx, dz = px - anchor.x, pz - anchor.z
-            d2 = dx * dx + dz * dz
-            within = d2 <= ANCHOR_RADIUS_SQ
-                and (anchor.y == nil or py == nil
-                     or math.abs(py - anchor.y) <= ANCHOR_HEIGHT_BAND)
-        end
+        local dx, dz = px - anchor.x, pz - anchor.z
+        local d2 = dx * dx + dz * dz
+        local within = d2 <= reach2
+            and (anchor.y == nil or py == nil
+                 or math.abs(py - anchor.y) <= ANCHOR_HEIGHT_BAND)
         if within and d2 < best_d2 then best, best_d2 = anchor, d2 end
     end
     return best
+end
+
+_G.drap_door_hint_radius = function(r)
+    if tonumber(r) then anchor_radius = tonumber(r) end
+    log(string.format("door hint radius %.1f m", anchor_radius))
 end
 
 -- The key hint waits for the first Entrance Plaza cutscene (event 2, which
