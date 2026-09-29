@@ -533,7 +533,13 @@ local function run_slot_connect(slot_data)
 
     -- ScoopSanity option
     local scoop_sanity_enabled = (type(slot_data) == "table" and slot_data.scoop_sanity == true)
-    local sf_mode = (type(slot_data) == "table" and tonumber(slot_data.special_forces_mode)) or 0
+    -- Seeds up to 1.2.0 wrote special_forces_mode only inside slot_data.options.
+    local sf_mode = 0
+    if type(slot_data) == "table" then
+        sf_mode = tonumber(slot_data.special_forces_mode)
+            or (type(slot_data.options) == "table" and tonumber(slot_data.options.special_forces_mode))
+            or 0
+    end
     AP.effects.SpecialForces.set_mode(sf_mode)
     AP.ScoopSanityEnabled = scoop_sanity_enabled
     AP.ScoopUnlocker.set_scoop_sanity_enabled(scoop_sanity_enabled)

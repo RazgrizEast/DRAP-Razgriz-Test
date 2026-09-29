@@ -1332,6 +1332,9 @@ class DRWorld(World):
                 self._build_door_overlay_data() if door_randomizer_enabled else {}
             ),
             "scoop_sanity": scoop_sanity_enabled,
+            "special_forces_mode": (
+                self.options.special_forces_mode.value
+                if self.options.scoop_sanity.value else 0),
             "exclude_levels": exclude_levels_enabled,
             "exclude_rescues": exclude_rescues_enabled,
             "zombie_kill_tier": self.zombie_kill_tier,
