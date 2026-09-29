@@ -3154,6 +3154,58 @@ local function last_resort_fallback()
     raw_set_flag_on(LAST_RESORT_FINISH_FLAG)
 end
 
+-- A psychopath's death normally comes with his scoop's FINISH/SUCCESS flags
+-- (and some a TIMEOUT flag) in the same frame. Now and then the game sets
+-- the death flag and skips the rest, and the psychopath stays standing at
+-- zero health (Cliff 2026-09-29; Paul's double 2026-09-10). Across every
+-- flag trace on record the rest never came at all in most of those. After a
+-- short dwell, raise what the game should have. Pairs are measured from the
+-- traces, not names. Kent is left to KentChain, and Sean to the cult
+-- respawn, which clears his death and finish flags on purpose (CULT_OFF);
+-- the main-scoop psychopaths get no finish flags at their deaths even in
+-- vanilla.
+local PSYCHO_FINISH = {
+    { die = 1293, flags = { 846, 2446, 1172 } },            -- Cliff
+    { die = 1295, flags = { 848, 2448 } },                  -- Adam
+    { die = 1296, flags = { 849, 2449 } },                  -- Jo
+    { die = 1297, flags = { 850, 2450 } },                  -- Paul
+    { die = 1302, flags = { 874, 2474 } },                  -- Cletus
+    { die = 453,  flags = { 872 } },                        -- the convicts, all three
+}
+local PSYCHO_FINISH_WAIT_SECONDS = 3.0
+local psycho_finish_missing_since = {}
+local psycho_finish_next_check = 0
+
+local function psycho_finish_fallback()
+    local now = os.clock()
+    if now < psycho_finish_next_check then return end
+    psycho_finish_next_check = now + 0.5
+    if not (scoop_sanity_enabled and State.is_activated())
+        or State.is_endgame_reached() or not world_stable() then
+        psycho_finish_missing_since = {}
+        return
+    end
+    for _, row in ipairs(PSYCHO_FINISH) do
+        local missing = raw_check_flag(row.die) == true
+            and raw_check_flag(row.flags[1]) == false
+        if not missing then
+            psycho_finish_missing_since[row.die] = nil
+        else
+            -- A dwell, so the game's own finish always gets the first chance.
+            psycho_finish_missing_since[row.die] = psycho_finish_missing_since[row.die] or now
+            if now - psycho_finish_missing_since[row.die] >= PSYCHO_FINISH_WAIT_SECONDS then
+                psycho_finish_missing_since[row.die] = nil
+                M.log(string.format("psychopath death flag %d is on but the game never"
+                    .. " finished its scoop -- raising %s", row.die,
+                    table.concat(row.flags, ", ")))
+                for _, fid in ipairs(row.flags) do
+                    if raw_check_flag(fid) == false then raw_set_flag_on(fid) end
+                end
+            end
+        end
+    end
+end
+
 --- Put back the story flags the 72 hours cleared (see OVERTIME_HIDEOUT_FLAGS).
 local function restore_overtime_story()
     local want = {}
@@ -3224,7 +3276,10 @@ function M.on_frame()
     -- World-stability tracking + parked unlock/reapply draining.
     update_world_stability()
 
-    if Shared.is_in_game() then last_resort_fallback() end
+    if Shared.is_in_game() then
+        last_resort_fallback()
+        psycho_finish_fallback()
+    end
 
     -- Process flag clears scheduled from the evFlagOn pre-hook. The one-frame
     -- delay lets the engine's evFlagOn body finish so the clear sticks.
