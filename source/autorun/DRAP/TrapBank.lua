@@ -128,15 +128,19 @@ function M.total_banked()
     return n
 end
 
+-- Out of gameplay, the next entry restarts the settle clock. Caught here
+-- rather than in on_frame: the main loop does not tick modules outside the
+-- game, so on_frame never saw it, and a save loaded into the same area (same
+-- area index) skipped the settle wait entirely.
+re.on_frame(function()
+    if not Shared.is_in_game() then was_in_game = false end
+end)
+
 function M.on_frame()
     if not M:should_run() then return end
     if not Ledger.is_init() then return end
     if not loaded then M.load() end
-    if not Shared.is_in_game() then
-        -- Out of gameplay: the next entry restarts the settle clock.
-        was_in_game = false
-        return
-    end
+    if not Shared.is_in_game() then return end
 
     local now = os.clock()
 

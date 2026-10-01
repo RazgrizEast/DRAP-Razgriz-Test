@@ -302,14 +302,20 @@ end
 -- Frame driver
 ------------------------------------------------------------
 
-function M.on_frame()
-    if not active then return end
-    if not Shared.is_in_game() then
-        -- An area transition mid-run would act on a stale inventory.
+-- A quit or save load mid-trap would carry on against the loaded save's
+-- inventory. Caught here rather than in on_frame, which the main loop never
+-- ticks outside the game. Area changes do not drop is_in_game and do not
+-- need to: inventory() is re-read every step.
+re.on_frame(function()
+    if active and not Shared.is_in_game() then
         M.log("inventory trap abandoned -- left the game world")
         active = nil
-        return
     end
+end)
+
+function M.on_frame()
+    if not active then return end
+    if not Shared.is_in_game() then return end
 
     active.frames = active.frames + 1
     if active.frames > MAX_FRAMES then
