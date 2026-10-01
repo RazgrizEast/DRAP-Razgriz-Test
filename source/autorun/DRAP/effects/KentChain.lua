@@ -382,6 +382,13 @@ local function note_waiting(name)
         tostring(name)))
 end
 
+--- The Kent day held until the player leaves Paradise Plaza, or nil. The
+--- Scoops tab shows it as deferred, since nothing else says why it has not
+--- started.
+function M.waiting_to_leave_paradise()
+    return outside_wait_logged
+end
+
 local function unlocker()
     return _G.AP and _G.AP.ScoopUnlocker
 end

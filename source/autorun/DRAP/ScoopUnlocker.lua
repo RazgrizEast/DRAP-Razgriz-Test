@@ -2907,6 +2907,9 @@ function M.draw_tab_content(debug)
     imgui.begin_child_window("ScoopList", Vector2f.new(0, 0), true, 0)
 
     local status_list = M.get_all_status()
+    local kc = _G.AP and _G.AP.effects and _G.AP.effects.KentChain
+    local kent_waiting = kc and kc.waiting_to_leave_paradise
+        and kc.waiting_to_leave_paradise() or nil
     local current_chain_scoop = M.get_current_chain_scoop()
     local side_header_shown = false
 
@@ -2957,6 +2960,9 @@ function M.draw_tab_content(debug)
                 color = COLOR_FAILED
             elseif not s.ap_item_received then
                 color = COLOR_NO_ITEM
+            elseif s.name == kent_waiting then
+                status_str = " - deferred (leave Paradise Plaza and come back)"
+                color = COLOR_READY
             elseif is_current_chain and s.received then
                 status_str = " [CURRENT]"
                 color = COLOR_GO
