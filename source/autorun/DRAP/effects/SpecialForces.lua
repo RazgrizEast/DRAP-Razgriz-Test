@@ -54,6 +54,11 @@ local BGM_TYPE = "app.solid.SoundBGMManager"
 local SF_FLAG = 309          -- EV_EVENT47: the soldiers
 local SF_EXCLUDE_FLAG = 311  -- EV_EVENT49: their rows require this OFF
 local JESSIE_FLAG = 769      -- nothing before Jessie, same as every scoop
+-- The Facts' primary flag. Zombie Jessie is placed by the Security Room's
+-- enemy layout, and with 309 held on that layout is the soldiers' -- she
+-- never spawned and the run could not finish (RobaSpec, 2026-09-30). Every
+-- clean Jessie spawn on record had 309 off, vanilla included.
+local FACTS_FLAG = 305
 
 local MODE_NONE, MODE_ITEM, MODE_PERMANENT = 0, 1, 2
 
@@ -138,7 +143,14 @@ function M.on_frame()
     -- Nothing before Jessie, exactly as in a new game.
     if flag_get(JESSIE_FLAG) ~= true then return end
 
-    if mode == MODE_PERMANENT then
+    if mode ~= MODE_NONE and flag_get(FACTS_FLAG) == true then
+        -- Stand down for The Facts so the Security Room gets Zombie Jessie.
+        -- In item mode the scoop's side-active claim also stops at 305, so
+        -- this one clear is all it takes in either mode.
+        if flag_get(SF_FLAG) == true and flag_set(SF_FLAG, false) then
+            M.log("The Facts started -- Special Forces withdrawn so Zombie Jessie can spawn")
+        end
+    elseif mode == MODE_PERMANENT then
         -- No scoop to carry the flag in this mode, so hold it here. Re-checked
         -- rather than set once: the engine clears it across some transitions.
         if flag_get(SF_FLAG) ~= true then

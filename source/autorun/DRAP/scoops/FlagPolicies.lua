@@ -37,6 +37,14 @@
 
 local M = {}
 
+-- Withdrawn once The Facts starts (its primary flag): with 309 on, the
+-- Security Room's enemy layout is the soldiers' and Zombie Jessie is never
+-- placed. Only side-active stops claiming it; SpecialForces drops the flag
+-- once, and nothing then holds it either way (a per-tick off-claim fought
+-- the story's own 309 once already -- see side-completed).
+local FACTS_FLAG = 305
+local WITHDRAWN_FOR_FACTS = { ["Special Forces"] = true }
+
 -- deps: the data tables owned by ScoopUnlocker.
 --   scoop_data, controlled_flags, cascade_flags, all_side_scoop_flags,
 --   blacklist, protected_primary_flags, main_blocks_side,
@@ -263,6 +271,8 @@ function M.build(deps)
                 -- re-asserted in the retire window). Never claim them here.
                 if data.category ~= "Main" and data.flags
                     and not data.chain_managed
+                    and not (WITHDRAWN_FOR_FACTS[scoop_name]
+                             and ctx.check_flag(FACTS_FLAG) == true)
                     and ctx.is_active(scoop_name)
                     and not ctx.is_conflict_blocked(scoop_name)
                     and not ctx.is_blocked_by_active_main(scoop_name)
