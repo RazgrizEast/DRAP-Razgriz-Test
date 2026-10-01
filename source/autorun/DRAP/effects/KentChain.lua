@@ -1103,6 +1103,14 @@ local function trace_tick()
 end
 
 re.on_frame(function()
+    -- The load edge is caught here: the main loop does not tick modules
+    -- outside the game, so M.on_frame never saw one and a save reloaded from
+    -- before an arm left the day unarmed for good (RobaSpec 2026-09-30: day 1
+    -- armed, quit to title 6 s later, Kent never spawned).
+    if not Shared.is_in_game() then
+        want_since = nil
+        verify_pending = true
+    end
     -- The outside-Paradise watch runs here rather than in M.on_frame, so it
     -- keeps watching whatever the main loop is doing.
     pcall(track_outside)
@@ -1130,11 +1138,7 @@ end
 
 function M.on_frame()
     if not M:should_run() then return end
-    if not Shared.is_in_game() then
-        want_since = nil
-        verify_pending = true
-        return
-    end
+    if not Shared.is_in_game() then return end
     if not scoop_sanity_on() then return end
     -- Overtime is the game's: no arms, no pins, no quiet-state suppression.
     if State.is_endgame_reached() then return end
