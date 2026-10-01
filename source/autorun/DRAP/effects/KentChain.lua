@@ -713,8 +713,14 @@ local function maintain_record(name)
                     scrub_detail = string.format(
                         "scs=%d free=0x%x timeout=%d situ=%d pos=(%.1f, %.1f, %.1f)",
                         scs, free, tmo, situ, px, py, pz)
-                    info:set_field("mScoopCheckState", 0)
-                    info:set_field("mScoopTimeOutFlag", 0)
+                    -- A live check (scs 1) is the armed day's own: zeroing it
+                    -- with the 0x200 marker left the meeting nothing to report
+                    -- and the finish resolved it as lost, "Scoop Chance Lost"
+                    -- (Ice 2026-09-27). A live check is left alone.
+                    if scs ~= 1 then
+                        info:set_field("mScoopCheckState", 0)
+                        info:set_field("mScoopTimeOutFlag", 0)
+                    end
                     info:set_field("mFreeFlag", free & 1)
                     info:set_field("mSituationNo", 0)
                     -- Restore the record position ONLY as part of a poison
