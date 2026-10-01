@@ -419,6 +419,15 @@ function M.is_transition_locked(origin_code, destination_code)
     return door_is_locked(tostring(origin_code), tostring(destination_code))
 end
 
+--- True while the prologue doorway is held open regardless of its key (see
+--- is_prologue_doorway), so a key hint there would name a key the door is not
+--- waiting on. Keyed on the doorway's vanilla destination, like the lock.
+function M.is_prologue_exempt(origin_code, vanilla_destination)
+    refresh_jessie_state()
+    return before_jessie
+        and is_prologue_doorway(tostring(origin_code), tostring(vanilla_destination))
+end
+
 function M.get_split_keys_enabled()
     return split_keys_enabled
 end

@@ -306,9 +306,9 @@ _G.drap_door_hint_radius = function(r)
     log(string.format("door hint radius %.1f m", anchor_radius))
 end
 
--- The key hint waits for the first Entrance Plaza cutscene (event 2, which
+-- The door hint waits for the first Entrance Plaza cutscene (event 2, which
 -- the engine records in EV_EVENT02_1 / EV_EVENT02_2). Before it the player
--- is still in the opening and a "needs <key>" toast reads as a bug. Read
+-- is still in the opening and a door toast reads as a bug. Read
 -- from the flags, not the ledger: a new game on the same seed starts over.
 local EP_INTRO_FLAGS = { 259, 256 }
 local ep_intro_seen = false
@@ -384,6 +384,12 @@ end
 
 local function show_nearby_door()
     if next(_state.anchors_by_scene) == nil then return end
+    -- Nothing at all during the Opening, not just the key part: redirects
+    -- and Door Locks would still name the Heliport's doors otherwise.
+    if not ep_intro_done() then
+        _state.last_shown_text = nil
+        return
+    end
     local px, py, pz = get_player_xyz()
     if px == nil then return end
 
@@ -395,7 +401,12 @@ local function show_nearby_door()
 
     local scene = get_current_scene_code()
     local key = locked_key_for(scene, NAME_TO_SCENE_CODE[anchor.to])
-    if key and not ep_intro_done() then key = nil end
+    -- The Security Room's mall door stays open until Jessie whatever its key.
+    local lock_mod = _G.AP and _G.AP.DoorSceneLock
+    if key and lock_mod and lock_mod.is_prologue_exempt
+        and lock_mod.is_prologue_exempt(scene, NAME_TO_SCENE_CODE[anchor.vanilla]) then
+        key = nil
+    end
     local redirected = anchor.to ~= anchor.vanilla
 
     -- Anchors are sent for every seed now, so this path runs even with the
