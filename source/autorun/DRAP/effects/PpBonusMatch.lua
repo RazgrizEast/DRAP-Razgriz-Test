@@ -54,6 +54,8 @@ local install_award_hook
 local most_active
 local match_report
 local match_award
+local rack_instance
+local state_magnitude
 
 local instances_by_trigger = {}   -- id -> { match, om_type, items = {...} }
 local bridge = nil                -- set by setup(); object-driven sends go here
@@ -634,7 +636,12 @@ local function poll_state(scene, t)
         -- out of RNO0_WAIT_COOK; for a stove it is the pan going on, which is
         -- when the game awards the PP.
         if was ~= nil and was == want and now ~= want then
-            local inst = map[addr]
+            -- A stove streamed in after the last index pass has an address
+            -- the index never saw, and the pan going on was dropped without a
+            -- word (RobaRising 2026-10-02: Paradise Roastmasters, indexed 4 of
+            -- 5, sent only on a second visit). It never moves, so its
+            -- position still names it.
+            local inst = rack_instance(scene, t, map, addr, om)
             if inst then out[#out + 1] = inst end
         end
     end
@@ -675,6 +682,20 @@ local function install_method_hook(id, t)
     log(string.format("%s: watching %s", id, key))
 end
 
+--- How far an object's state field is from rest, for ranking. Numbers by
+--- size; a boolean state (a stove's mAccessEnableFlag) is 1 once it has left
+--- the trigger's watched value -- the pan is on -- and 0 otherwise. Reading
+--- it with tonumber() made every stove unreadable, so the award fallback
+--- could never name one.
+function state_magnitude(t, raw)
+    if type(raw) == "boolean" then
+        if t.state_from == nil then return nil end
+        return (raw ~= t.state_from) and 1 or 0
+    end
+    local v = tonumber(raw)
+    return v and math.abs(v) or nil
+end
+
 --- The instance for a rack, by address, else by where it stands.
 ---
 --- The four racks were indexed on entering Entrance Plaza, and three
@@ -682,8 +703,8 @@ end
 --- index had never seen (2026-09-25 log: indexed=4 live=4
 --- best_is_indexed=false), so no single rack sent until Spin All did. A rack
 --- turns in place and never moves, so its position still says which one it
---- is; the new address is added to the index.
-local function rack_instance(scene, t, map, addr, om)
+--- is; the new address is added to the index. Stoves use it the same way.
+function rack_instance(scene, t, map, addr, om)
     local inst = map[addr]
     if inst then return inst end
     local p = om_position(om)
@@ -719,11 +740,11 @@ function match_report(scene, t)
     local seen, readable, best_mag, best_mapped = 0, 0, 0.0, false
     for addr, om in pairs(objects_of_type(t.om_type)) do
         seen = seen + 1
-        local v = tonumber(safe(function() return om:get_field(t.state_field) end))
+        local v = state_magnitude(t, safe(function() return om:get_field(t.state_field) end))
         if v then
             readable = readable + 1
-            if math.abs(v) > best_mag then
-                best_mag = math.abs(v)
+            if v > best_mag then
+                best_mag = v
                 best_mapped = map and map[addr] ~= nil
             end
         end
@@ -747,15 +768,19 @@ end
 function most_active(scene, t)
     local map = ensure_index(scene, t.om_type, t.items)
     local best, best_mag = nil, 0.0
+    local tied = false
     for addr, om in pairs(objects_of_type(t.om_type)) do
-        local v = tonumber(safe(function() return om:get_field(t.state_field) end))
-        if v then
-            local mag = math.abs(v)
-            if mag > best_mag then
-                best, best_mag = rack_instance(scene, t, map, addr, om), mag
-            end
+        local mag = state_magnitude(t, safe(function() return om:get_field(t.state_field) end))
+        if mag and mag > best_mag then
+            best, best_mag, tied = rack_instance(scene, t, map, addr, om), mag, false
+        elseif mag and mag > 0 and mag == best_mag then
+            tied = true
         end
     end
+    -- Two stoves with a pan on rank the same; naming either could send the
+    -- one already done. Decline rather than guess -- the object poll still
+    -- catches the next use.
+    if tied then return nil, best_mag end
     return best, best_mag
 end
 
