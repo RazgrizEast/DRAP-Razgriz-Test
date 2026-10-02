@@ -111,6 +111,11 @@ def main():
         z.write(os.path.join(REPO, "lua-apclientpp.dll"), "lua-apclientpp.dll")
         z.write(os.path.join(REPO, "THIRD-PARTY-LICENSES.md"), "THIRD-PARTY-LICENSES.md")
         z.write(os.path.join(REPO, "LICENSE"), "LICENSE-DRAP.txt")
+        # Copies seeds saved in Steam's store before 1.2.0 into AP_Saves.
+        # Lands next to DRDR.exe, which is where it has to run from.
+        migrate = os.path.join(REPO, "tools", "migrate")
+        for f in ("Migrate Old AP Saves.bat", "Migrate-OldAPSaves.ps1"):
+            z.write(os.path.join(migrate, f), f)
         for root, dirs, files in os.walk(autorun):
             for f in files:
                 full = os.path.join(root, f)

@@ -86,6 +86,9 @@ Seeds you played on an older version of the mod kept their saves in Steam's stor
 (`C:\Program Files (x86)\Steam\userdata\{Your SteamID}\2527390\remote\win64_save_AP_*`). To keep
 playing one of those, close the game and copy that seed's files into `AP_Saves\{Slot}_s{Seed}`
 (create the folder if it is not there yet; the name is the part after `win64_save_AP_`).
+The release includes `Migrate Old AP Saves.bat` in the game folder: with the game closed,
+double-click it and it copies every old seed over for you. It never deletes the originals and
+skips any seed that already has saves in `AP_Saves`.
 
 **Why this changed.** Steam caps this game's save store at 30 files, whether or not Steam Cloud is
 enabled. Vanilla alone can use 23 of them, and every seed used to add its autosave plus one file per
