@@ -754,6 +754,7 @@ local function try_reapply_if_ready()
             if ng then
                 log("New game detected -- resetting side scoop progress")
                 AP.ScoopUnlocker.reset_for_new_game()
+                AP.EventTracker.reset_sent()
             end
         else
             return  -- retry next frame; don't reapply against unsettled flags

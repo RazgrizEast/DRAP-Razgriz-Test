@@ -228,6 +228,17 @@ end
 -- Location Firing
 ------------------------------------------------------------
 
+--- Forget what has been reported, for a new game. The set only lives for the
+--- session, so a run completed and then started over in the same session
+--- swallowed every repeat: Kent's day 1 finished again but ScoopUnlocker never
+--- heard, and day 2 never unlocked (RobaRising 2026-10-02). A new game starts
+--- with these flags off, so nothing replays. Older saves keep the set.
+function M.reset_sent()
+    local n = 0
+    for k in pairs(SENT_DESCRIPTIONS) do SENT_DESCRIPTIONS[k] = nil; n = n + 1 end
+    M.log(string.format("new game -- forgot %d reported location(s)", n))
+end
+
 local function maybe_fire_location(desc, source, raw_id, extra)
     if not desc then return end
     if SENT_DESCRIPTIONS[desc] then return end
