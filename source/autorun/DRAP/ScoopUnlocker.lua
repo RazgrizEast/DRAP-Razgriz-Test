@@ -355,6 +355,7 @@ local MILESTONE_EVENTS = {
 }
 
 local JESSIE_FLAG = 769  -- ON after talking to Jessie; OFF = player reloaded pre-Jessie save
+local forced_activation = false   -- scoop_activate from the console, not Jessie
 -- Reload-detector dwell: 769 must read confirmed-false this long before the
 -- destructive deactivation runs (failed/pre-restore reads reset the timer).
 local RELOAD_CONFIRM_SECONDS = 2.0
@@ -1284,6 +1285,17 @@ local function enforce_flags()
     local now = os.clock()
     if now - last_enforcement_time < ENFORCEMENT_COOLDOWN then return end
     last_enforcement_time = now
+
+    -- A load can bring in a pre-Jessie world (a new game, or an older save)
+    -- while the last run's activation still stands: the new-game check waits
+    -- for the inventory and the reload detector for a 2 s dwell. Enforcing in
+    -- that gap wrote the old run's flags into the opening -- The Last Resort's
+    -- 294 played its Security Room video in a new game and Jessie never came
+    -- (RobaRising 2026-10-02). Activation follows Jessie, so wait for her.
+    if State.is_activated() and not forced_activation
+        and raw_check_flag(JESSIE_FLAG) ~= true then
+        return
+    end
 
     if reconciler_mode == "active" then
         -- The controlled-off claims subsume hook-flagged suppression;
@@ -2471,6 +2483,7 @@ function M.set_time_unfreeze_callback(callback)
 end
 
 function M.force_activate()
+    forced_activation = true
     activate_ap("FORCED: AP enforcement activated")
 end
 
