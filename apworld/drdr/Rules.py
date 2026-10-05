@@ -1434,15 +1434,6 @@ def set_rules(world) -> None:
     if world.options.special_forces_mode.value and world.options.scoop_sanity:
         _sf_item_mode = world.options.special_forces_mode.value == 1
 
-        # Killing them needs nothing but the soldiers being present. In item
-        # mode that is the scoop; in permanent they are there from Jessie on.
-        _kill_reqs = []
-        if _sf_item_mode:
-            _kill_reqs.append(Has("Special Forces"))
-        world.set_rule(
-            world.multiworld.get_location("Kill 10 Special Forces", world.player),
-            And(*_kill_reqs) if _kill_reqs else CanReachRegion("Paradise Plaza"))
-
         # The helicopter is over Leisure Park and has to be SHOT down, so
         # reaching the park is not enough on its own -- under door
         # randomization the first door can open onto Leisure Park with no gun
@@ -1478,6 +1469,23 @@ def set_rules(world) -> None:
                 Or(*[Has(g) for g in
                      ("Handgun", "Sniper Rifle", "Submachine Gun")]),
             )
+
+        # Ten soldiers is a fight, not a stroll: out in the mall and armed the
+        # same way as for the helicopter. Paradise or Entrance Plaza, since the
+        # Security Room's own doorway can open Entrance Plaza before Paradise.
+        # The item alone put it in logic while the player was still in the
+        # Security Room (tester report, 2026-10-05). In item mode the scoop has
+        # to have brought them; in permanent they are there from Jessie on.
+        # Spitter Only has no guns in the pool -- the spit is the weapon there,
+        # so being out in the mall is enough.
+        _kill_reqs = [Or(CanReachRegion("Paradise Plaza"), CanReachRegion("Entrance Plaza"))]
+        if not world.spitter_only:
+            _kill_reqs.append(_armed)
+        if _sf_item_mode:
+            _kill_reqs.append(Has("Special Forces"))
+        world.set_rule(
+            world.multiworld.get_location("Kill 10 Special Forces", world.player),
+            And(*_kill_reqs))
 
         # Spitter Only has no helicopter check at all: the location is
         # dropped in create_region, and the runtime completes the Special
