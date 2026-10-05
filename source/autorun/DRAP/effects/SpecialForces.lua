@@ -59,6 +59,10 @@ local JESSIE_FLAG = 769      -- nothing before Jessie, same as every scoop
 -- never spawned and the run could not finish (RobaSpec, 2026-09-30). Every
 -- clean Jessie spawn on record had 309 off, vanilla included.
 local FACTS_FLAG = 305
+-- EV_ZOMBIE_JESSIE_DIE. Once she is dead the story raises 309 itself for the
+-- soldiers' arrival cutscene; clearing it then replayed that cutscene without
+-- end (RobaRising 2026-10-05), so from here on this module is hands off.
+local JESSIE_DEAD_FLAG = 1311
 
 local MODE_NONE, MODE_ITEM, MODE_PERMANENT = 0, 1, 2
 
@@ -132,10 +136,12 @@ function M.on_frame()
     -- of the story, with their own music -- holding 309 or silencing the mall
     -- past that point is meddling with content that already works. Lift the
     -- block too, so Overtime sounds the way it should.
-    if State.is_endgame_reached() then
+    -- Zombie Jessie's death counts too: the arrival cutscene comes before
+    -- Overtime does.
+    if State.is_endgame_reached() or flag_get(JESSIE_DEAD_FLAG) == true then
         if music_blocked then
             set_music_blocked(false)
-            M.log("Overtime reached -- Special Forces handling stands down")
+            M.log("Zombie Jessie dead / Overtime -- Special Forces handling stands down")
         end
         return
     end
