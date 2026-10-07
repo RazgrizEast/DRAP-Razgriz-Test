@@ -1297,6 +1297,11 @@ local function enforce_flags()
         return
     end
 
+    -- A goal ending is jumping the story itself (EndingSequence.is_jumping):
+    -- its flags are not ours to correct.
+    local Ending = AP and AP.effects and AP.effects.EndingSequence
+    if Ending and Ending.is_jumping and Ending.is_jumping() then return end
+
     if reconciler_mode == "active" then
         -- The controlled-off claims subsume hook-flagged suppression;
         -- drop the queue so it can't grow unbounded.
@@ -1475,8 +1480,8 @@ local function install_hooks()
                         -- check, asking for the Psycho ending immediately
                         -- triggered Ending A instead, from inside the flag
                         -- write, before the Psycho flags had all gone on.
-                        if ok_e and Ending and Ending.is_pending
-                                and Ending.is_pending() then
+                        if ok_e and Ending and ((Ending.is_pending and Ending.is_pending())
+                                or (Ending.is_jumping and Ending.is_jumping())) then
                             time_skips_fired[flag_id] = true
                             M.log(string.format(
                                 "Ending jump: flag %d (%s) ignored -- a goal"

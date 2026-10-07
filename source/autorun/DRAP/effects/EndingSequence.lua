@@ -49,6 +49,21 @@ local am_mgr = M:add_singleton("am", AM_TYPE)
 local ETM_TYPE = "app.solid.gamemastering.EventTimelineManager"
 local etm_mgr = M:add_singleton("etm", ETM_TYPE)
 
+-- The invasion is event 50: in the 0825 capture trace it is the event that
+-- raises 309 (the soldiers), before the capture's event 88. Watching the event
+-- number, not 309 or "a cutscene played": Ending A raises 309 itself, any
+-- Special Forces seed has it on already, and another scene can play at the
+-- jump -- each of those once dealt the death with no soldiers there.
+local GM_TYPE = "app.solid.gamemastering.GameManager"
+local gm_mgr = M:add_singleton("gm", GM_TYPE)
+local INVASION_EVENT = 50
+
+local function current_event_no()
+    local gm = gm_mgr:get()
+    if not gm then return nil end
+    return Shared.to_int(Shared.safe(function() return gm:get_field("mEventNo") end))
+end
+
 local function event_playing()
     local etm = etm_mgr:get()
     if not etm then return nil end
@@ -113,7 +128,16 @@ local FLAG_ZOMBIE_JESSIE = 1311
 -- 4, leaving only the invasion cutscene to play. Narrowed by hand from a full
 -- turbo trace; the EV_SCQ_* and EV_RADIO_MES_* traffic in that trace is the
 -- game's own bookkeeping and does not need setting.
+--
+-- 265 and 268 are the story as far as Jessie. The reconciler holds them off
+-- while Hideout and Backup for Brad are inactive, which on a Psycho seed is
+-- always. With them off the jump crosses case 1-2's deadline unstarted, the
+-- game raises EV_CASE_FAIL (2326), and the death is a game over instead of
+-- the capture.
+local FLAG_CASE_FAIL = 2326
 local PSYCHO_FLAGS = {
+     265,  -- EV_EVENT08_00 (Hideout's secondary)
+     268,  -- EV_EVENT11 (Backup for Brad's primary)
     1311,  -- EV_ZOMBIE_JESSIE_DIE: the story has nothing left to run
      356,  -- EV_EVS05: lets one clock write go all the way
      305,  -- EV_EVENT43
@@ -164,11 +188,14 @@ local pending_done_flag = FLAG_ENDING_B
 local jumped = false
 -- When the player was first seen in the Security Room, for the settle wait.
 local in_room_since = nil
--- Psycho runs as a small sequence: which stage, its deadline, and whether a
--- cutscene has been seen during this stage.
+-- Psycho runs as a small sequence: which stage, and its deadline.
 local psycho_stage = nil
 local psycho_at = nil
-local psycho_saw_event = false
+-- Set once event 50, the invasion, has been seen during stage 1.
+local psycho_invasion_seen = false
+-- Set once the invasion has taken the player out of the Security Room. Its
+-- second half plays in Entrance Plaza and then puts Frank back in the room.
+local psycho_left_room = false
 -- os.clock() since which nothing has been on screen, or nil while a scene is.
 local psycho_quiet_since = nil
 -- Flags this sequence turned on that were off before, so a run that does NOT
@@ -243,26 +270,9 @@ function M.jump_to_ending_b()
     return jump_to_ending({ FLAG_SKIP_CUTSCENES }, "Ending B")
 end
 
---- Has the cutscene for this stage finished?
----
---- True once a scene has been seen and has ended, or once the limit passes
---- with no scene at all. Watching for the END rather than counting seconds is
---- what lets a player sit through the invasion without the death landing on
---- top of it.
-local function stage_ready()
-    local playing = event_playing()
-    if playing == true then
-        psycho_saw_event = true
-        return false
-    end
-    if psycho_saw_event then return true end
-    return os.clock() >= psycho_at
-end
-
 local function enter_stage(n, limit)
     psycho_stage = n
     psycho_at = os.clock() + limit
-    psycho_saw_event = false
     psycho_quiet_since = nil
 end
 
@@ -272,10 +282,17 @@ end
 --- played:
 ---
 ---   1. flags + jump to day 4 00:00   the invasion cutscene plays
----   2. jump to day 4 11:30           so the last hop is not midnight -> noon
+---   2. jump to day 4 09:45           so the last hop is not midnight -> noon
 ---   3. death                         the game turns this into the capture
 ---   4. jump to day 4 12:01           finishes the run
 function M.jump_to_ending_psycho()
+    -- Running from here, before the first flag write: 1311 below sets off
+    -- ScoopUnlocker's Ending A jump from inside the write unless the sequence
+    -- already counts as under way (is_jumping). From the console there is no
+    -- pending goal to stop it.
+    psycho_stage = 0
+    psycho_invasion_seen = false
+    psycho_left_room = false
     psycho_flags_raised = {}
     for _, id in ipairs(PSYCHO_FLAGS) do
         -- Only ours to undo if it was not already set by the player's run.
@@ -295,17 +312,83 @@ function M.jump_to_ending_psycho()
     return held
 end
 
+--- Whether the screen has been clear of cutscenes for `settle` seconds. An
+--- unreadable state counts as NOT clear: the timeline manager does not exist
+--- until the first cutscene, and treating "no manager yet" as clear moved on
+--- the instant the invasion began.
+local function screen_clear(now)
+    if event_playing() ~= false then
+        psycho_quiet_since = nil
+        return false
+    end
+    psycho_quiet_since = psycho_quiet_since or now
+    return (now - psycho_quiet_since) >= psycho_delays.settle
+end
+
+-- How many times the death has been dealt this sequence. A death that lands
+-- under a cutscene is swallowed (nothing happens), so it is retried.
+local psycho_death_tries = 0
+local PSYCHO_DEATH_TRIES = 3
+-- How long past a stage's limit to keep waiting for a clear screen once the
+-- thing it waits for has happened, before going ahead anyway.
+local PSYCHO_CLEAR_GRACE = 120.0
+
+local function deal_psycho_death()
+    psycho_death_tries = psycho_death_tries + 1
+    -- Not sent as a DeathLink: it is the capture's trigger, not a loss.
+    local ok, DeathLink = pcall(require, "DRAP/trackers/DeathLink")
+    if ok and DeathLink and DeathLink.kill_without_sending then
+        M.log(string.format("Psycho: stage 3 -- dealing the death (try %d of %d)",
+            psycho_death_tries, PSYCHO_DEATH_TRIES))
+        if flag_is_on(FLAG_CASE_FAIL) == true then
+            M.log("Psycho: flag 2326 (EV_CASE_FAIL) is on -- this death is"
+                .. " expected to be a game over, not the capture")
+        end
+        pcall(DeathLink.kill_without_sending, "psycho ending")
+    else
+        M.log("Psycho: DeathLink unavailable -- cannot deal the death")
+    end
+    enter_stage(3, psycho_delays.capture)
+end
+
 --- One step of the Psycho sequence, from the frame loop.
 local function advance_psycho()
     local TimeGate = require("DRAP/TimeGate")
+    local now = os.clock()
     if psycho_stage == 1 then
-        if not stage_ready() then return end
+        -- Wait for the invasion itself (event 50), not just any cutscene:
+        -- another scene can play at the jump, and a death before the soldiers
+        -- arrive is a plain game over.
+        --
+        -- It is two scenes, the Security Room and then Entrance Plaza, after
+        -- which Frank is loaded back into the room. The screen reads clear
+        -- between them and hopping the clock there skips the second, so
+        -- "over" means back in the room after leaving it.
+        if current_event_no() == INVASION_EVENT then psycho_invasion_seen = true end
+        local invaded = psycho_invasion_seen
+        if invaded then
+            local area = current_area()
+            if area and area >= 0 and area ~= SECURITY_ROOM_AREA then
+                psycho_left_room = true
+            end
+            local back = psycho_left_room and area == SECURITY_ROOM_AREA
+            if not (back and screen_clear(now))
+                    and now < psycho_at + PSYCHO_CLEAR_GRACE then
+                return
+            end
+            if not back then
+                M.log("Psycho: never saw the invasion bring Frank back to the"
+                    .. " Security Room -- going ahead anyway")
+            end
+        elseif now < psycho_at then
+            return
+        end
         -- No invasion means no Special Forces, and a death with no Special
         -- Forces is just a death: game over, the save reloads, and the stages
         -- after this write the clock onto a run that never asked for it.
         -- Seen on a save that had already been through an ending -- the jump
         -- back to midnight did not replay the cutscene.
-        if not psycho_saw_event then
+        if not invaded then
             M.log("Psycho: the invasion never played -- NOT dealing the death."
                 .. " Falling back to Ending B so the run still finishes.")
             -- Put the story back. These only make sense with the ending they
@@ -326,35 +409,39 @@ local function advance_psycho()
         M.log(string.format("Psycho: stage 2 -- clock -> day %d %02d:%02d,"
             .. " waiting for a clear screen",
             PSYCHO_PRE_DEATH[1], PSYCHO_PRE_DEATH[2], PSYCHO_PRE_DEATH[3]))
+        psycho_death_tries = 0
         enter_stage(2, psycho_delays.settle + 30.0)
     elseif psycho_stage == 2 then
         -- The death needs a clear screen: landing it under a cutscene is what
-        -- broke 11:30, 11:15 and 10:30. Wait for a QUIET run rather than a
-        -- single sample -- and take the deadline as an escape hatch, because
-        -- "return while something is playing" with no limit is a hang, not a
-        -- wait.
-        local now = os.clock()
-        if event_playing() == true then
-            psycho_quiet_since = nil
-        elseif psycho_quiet_since == nil then
-            psycho_quiet_since = now
-        end
-        local quiet_enough = psycho_quiet_since
-            and (now - psycho_quiet_since) >= psycho_delays.settle
-        if not quiet_enough and now < psycho_at then return end
-        if not quiet_enough then
+        -- broke 11:30, 11:15 and 10:30, and swallowed it on 2026-10-07. The
+        -- deadline is an escape hatch -- "return while something is playing"
+        -- with no limit is a hang, not a wait.
+        if not screen_clear(now) and now < psycho_at then return end
+        if not screen_clear(now) then
             M.log("Psycho: never got a clear screen -- dealing the death anyway")
         end
-        local ok, DeathLink = pcall(require, "DRAP/trackers/DeathLink")
-        if ok and DeathLink and DeathLink.kill_player then
-            M.log("Psycho: stage 3 -- dealing the death")
-            pcall(DeathLink.kill_player, "psycho ending")
-        else
-            M.log("Psycho: DeathLink unavailable -- cannot deal the death")
-        end
-        enter_stage(3, psycho_delays.capture)
+        deal_psycho_death()
     elseif psycho_stage == 3 then
-        if not stage_ready() then return end
+        -- The capture (363) is the proof the death took. Without it, jumping
+        -- the clock to 12:01 with the invasion's 309/311 still on plays
+        -- Ending A instead -- what happened when a death was swallowed.
+        if flag_is_on(FLAG_PSYCHO_CAPTURE) == true then
+            M.log("Psycho: capture started -- waiting for it to finish")
+            enter_stage(4, psycho_delays.capture)
+            return
+        end
+        if now < psycho_at then return end
+        if psycho_death_tries < PSYCHO_DEATH_TRIES then
+            M.log("Psycho: no capture after the death -- trying again")
+            enter_stage(2, psycho_delays.settle + 30.0)
+            return
+        end
+        M.log("Psycho: the capture never started -- stopping here rather than"
+            .. " jumping the clock into Ending A")
+        psycho_stage = nil
+        psycho_at = nil
+    elseif psycho_stage == 4 then
+        if not screen_clear(now) and now < psycho_at + PSYCHO_CLEAR_GRACE then return end
         TimeGate.set_game_time(table.unpack(PSYCHO_FINISH))
         M.log(string.format("Psycho: clock -> day %d %02d:%02d -- done",
             PSYCHO_FINISH[1], PSYCHO_FINISH[2], PSYCHO_FINISH[3]))
@@ -414,6 +501,14 @@ end
 --- Whether an ending is waiting to play.
 function M.is_pending()
     return pending_goal_location ~= nil
+end
+
+--- Whether an ending's jump is under way. ScoopUnlocker's flag enforcement
+--- stands aside meanwhile: it turned the Psycho sequence's 305 and 348 off a
+--- second after they were raised, since The Facts is not active on a Psycho
+--- seed, and the invasion never came (Ice 2026-10-06).
+function M.is_jumping()
+    return (pending_goal_location ~= nil and jumped) or psycho_stage ~= nil
 end
 
 local function send_pending_goal()

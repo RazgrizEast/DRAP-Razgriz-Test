@@ -37,9 +37,11 @@ local has_announced_death_this_life = false
 -- number of them.
 local held_death = nil
 
--- Set when a received DeathLink is what kills Frank, so that death is not
--- sent back out. Nothing stopped it before: every death sent one.
-local death_from_link = false
+-- Why the next death is not to be sent out, or nil. A received DeathLink
+-- must not echo back, and the Psycho ending's scripted death (the trigger for
+-- the Special Forces capture) must not kill the rest of the multiworld at
+-- the moment the run is won. Nothing stopped either before: every death sent.
+local quiet_death = nil
 
 ------------------------------------------------------------
 -- Public Callbacks
@@ -144,14 +146,22 @@ function M.kill_player(reason)
     return false
 end
 
---- A DeathLink from another player. Kills now if Frank is ready, else holds
---- it for the frame loop. Other callers (the Psycho ending, lethal
---- DamageLink) use kill_player and are not held.
-local function kill_from_link(reason)
-    death_from_link = true
+local function kill_quietly(reason, why)
+    quiet_death = why
     local ok = M.kill_player(reason)
-    if not ok then death_from_link = false end
+    if not ok then quiet_death = nil end
     return ok
+end
+
+--- A death that is not sent as a DeathLink: the Psycho ending's.
+function M.kill_without_sending(reason)
+    return kill_quietly(reason, tostring(reason))
+end
+
+--- A DeathLink from another player. Kills now if Frank is ready, else holds
+--- it for the frame loop. Lethal DamageLink uses kill_player and is not held.
+local function kill_from_link(reason)
+    return kill_quietly(reason, "a received DeathLink")
 end
 
 function M.receive(reason)
@@ -185,7 +195,7 @@ local function poll_death_state()
     -- Revive detection
     if last_is_dead == true and is_dead == false then
         has_announced_death_this_life = false
-        death_from_link = false
+        quiet_death = nil
         if M.on_revive_detected then
             pcall(M.on_revive_detected)
         end
@@ -195,9 +205,9 @@ local function poll_death_state()
     if (last_is_dead == false or last_is_dead == nil) and is_dead == true then
         if not has_announced_death_this_life then
             has_announced_death_this_life = true
-            if death_from_link then
-                death_from_link = false
-                M.log("Detected player death -- caused by a received DeathLink, not sent back.")
+            if quiet_death then
+                M.log("Detected player death -- " .. quiet_death .. ", not sent.")
+                quiet_death = nil
             else
                 M.log("Detected player death.")
                 if M.on_death_detected then
