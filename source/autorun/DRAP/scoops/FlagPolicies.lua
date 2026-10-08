@@ -37,11 +37,18 @@
 
 local M = {}
 
+-- Withdrawn once The Facts starts (its primary flag): with 309 on, the
+-- Security Room's enemy layout is the soldiers' and Zombie Jessie is never
+-- placed. Only side-active stops claiming it; SpecialForces drops the flag
+-- once, and nothing then holds it either way (a per-tick off-claim fought
+-- the story's own 309 once already -- see side-completed).
+local FACTS_FLAG = 305
+local WITHDRAWN_FOR_FACTS = { ["Special Forces"] = true }
+
 -- deps: the data tables owned by ScoopUnlocker.
 --   scoop_data, controlled_flags, cascade_flags, all_side_scoop_flags,
 --   blacklist, protected_primary_flags, main_blocks_side,
 --   post_jessie_flags, queen_spawn_flag, cult_on, cult_off,
---   endgame_flags
 function M.build(deps)
     local D = deps
 
@@ -49,6 +56,13 @@ function M.build(deps)
         local entry = D.protected_primary_flags[flag_id]
         if not entry then return false end
         if entry.scoop ~= scoop_name then return false end
+        -- until_transition: also protected for one area load after
+        -- while_active lapses. ScoopUnlocker owns the latch (it needs state
+        -- across ticks); this stays a pure ctx read.
+        if entry.until_transition and ctx.in_transition_grace
+                and ctx.in_transition_grace(flag_id) then
+            return true
+        end
         if entry.while_active then
             return ctx.is_active(entry.while_active)
         end
@@ -59,22 +73,16 @@ function M.build(deps)
     local function policy(p) table.insert(policies, p) end
 
     ----------------------------------------------------------------
-    policy{
-        name = "endgame", priority = 100,
-        collect = function(ctx, claim)
-            if not ctx.endgame then return end
-            for _, fid in ipairs(D.endgame_flags) do
-                claim(fid, "on")
-            end
-            -- Hideout 301 cutscene prevention: ON inside the hideout,
-            -- OFF everywhere else.
-            if ctx.area == ctx.hideout_area then
-                claim(301, "on")
-            else
-                claim(301, "off")
-            end
-        end,
-    }
+    -- Nothing is claimed in Overtime, deliberately. The game already puts
+    -- the world in the state Overtime needs on the way in: a vanilla save
+    -- measured at the Overtime spawn had 301, 2322, 265, 355, 2052 and 514
+    -- already on, with no mod running at all.
+    --
+    -- What used to be here forced 2052/514 on -- which the game does itself --
+    -- and drove 301 on inside the hideout and OFF everywhere else. That last
+    -- one was the only difference from vanilla we could find, and vanilla
+    -- never turns 301 off. Every other policy below already returns early on
+    -- ctx.endgame; this finishes the rule rather than starting a new one.
 
     ----------------------------------------------------------------
     policy{
@@ -175,7 +183,13 @@ function M.build(deps)
         collect = function(ctx, claim)
             if ctx.endgame or not ctx.activated then return end
             for scoop_name, data in pairs(D.scoop_data) do
-                if data.flags and not ctx.is_completed(scoop_name)
+                -- chain_managed (Kent): the days' start sets are CUMULATIVE
+                -- and share flags (day 3's set contains day 1/2's STARTs),
+                -- so suppressing a blocked sibling's list here clears the
+                -- ACTIVE day's own flags out from under KentChain. The
+                -- chain module is the only writer for these.
+                if data.flags and not data.chain_managed
+                    and not ctx.is_completed(scoop_name)
                     and ctx.is_conflict_blocked(scoop_name) then
                     for _, flag_id in ipairs(data.flags) do
                         if flag_id and flag_id ~= 0 then
@@ -196,7 +210,7 @@ function M.build(deps)
                 for _, side_name in ipairs(side_list) do
                     if ctx.is_blocked_by_active_main(side_name) then
                         local data = D.scoop_data[side_name]
-                        if data and data.flags then
+                        if data and data.flags and not data.chain_managed then
                             for _, flag_id in ipairs(data.flags) do
                                 if flag_id and flag_id ~= 0 then
                                     claim(flag_id, "off")
@@ -215,7 +229,8 @@ function M.build(deps)
         collect = function(ctx, claim)
             if ctx.endgame or not ctx.activated then return end
             for scoop_name, data in pairs(D.scoop_data) do
-                if data.disable_flags and ctx.is_active(scoop_name) then
+                if data.disable_flags and not data.chain_managed
+                    and ctx.is_active(scoop_name) then
                     for _, flag_id in ipairs(data.disable_flags) do
                         claim(flag_id, "off")
                     end
@@ -250,7 +265,14 @@ function M.build(deps)
         collect = function(ctx, claim)
             if ctx.endgame or not ctx.activated then return end
             for scoop_name, data in pairs(D.scoop_data) do
+                -- chain_managed (the Kent days): KentChain arms these ONCE
+                -- per transition and the engine drives from there. Holding
+                -- them per tick is what respawned day-2 Kent (1225
+                -- re-asserted in the retire window). Never claim them here.
                 if data.category ~= "Main" and data.flags
+                    and not data.chain_managed
+                    and not (WITHDRAWN_FOR_FACTS[scoop_name]
+                             and ctx.check_flag(FACTS_FLAG) == true)
                     and ctx.is_active(scoop_name)
                     and not ctx.is_conflict_blocked(scoop_name)
                     and not ctx.is_blocked_by_active_main(scoop_name)
@@ -266,23 +288,44 @@ function M.build(deps)
     }
 
     ----------------------------------------------------------------
+    -- Flags this policy has already put back. It stands in for the engine's
+    -- end-of-scoop cleanup, which happens ONCE -- so once the flag is
+    -- observed off, the flag goes back to being the game's business.
+    --
+    -- Claiming it off on every pass instead was a bug with teeth: flag 309 is
+    -- the Special Forces, and the story raises it again at 10pm on day 3.
+    -- Holding it down meant the game turned the soldiers on, the reconciler
+    -- turned them off a tick later, and the cutscene replayed without end.
+    local cleanup_done = {}
+
     policy{
         -- Completed-scoop flag cleanup, OPT-IN via clear_on_complete.
         -- DRAP-forced scoops never run the engine's end-of-scoop cleanup
         -- (finishSCQ never fires), so e.g. Cletus's flag stayed on and
         -- suppressed Gun Shop Standoff's room. Must NOT be category-wide:
         -- most scoops have content living past their AP completion
-        -- (cutscene checks, extra survivors, hostages). Today: Cletus alone.
+        -- (cutscene checks, extra survivors, hostages).
         name = "side-completed", priority = 45,
         collect = function(ctx, claim)
             if ctx.endgame or not ctx.activated then return end
             for scoop_name, data in pairs(D.scoop_data) do
                 if data.clear_on_complete and data.flags
                     and ctx.is_completed(scoop_name)
+                    -- Only for a scoop that finished in this session. A
+                    -- completed scoop loaded from the ledger finished long
+                    -- ago, and re-running the tidy-up on every load would
+                    -- clear a flag the game has since raised for its own
+                    -- reasons.
+                    and ctx.completed_this_session(scoop_name)
                     and not ctx.in_grace(scoop_name) then
                     for _, flag_id in ipairs(data.flags) do
-                        if flag_id and flag_id ~= 0 then
-                            claim(flag_id, "off")
+                        if flag_id and flag_id ~= 0
+                            and not cleanup_done[flag_id] then
+                            if ctx.check_flag(flag_id) == false then
+                                cleanup_done[flag_id] = true
+                            else
+                                claim(flag_id, "off")
+                            end
                         end
                     end
                 end
@@ -335,6 +378,13 @@ function M.build(deps)
         -- END wins over DISP, so an active box must also hold END off.
         -- Covers Survivor + Psychopath (the 3 cutscene psychopaths --
         -- Cletus/Convicts/Cult -- have no disp_flag and are skipped).
+        --
+        -- `engine_owns_box` marks a scoop whose box the ENGINE drives -- the
+        -- Kent chain, where completing one day hands over by setting the next
+        -- day's entry flag and SCQManager re-asserts it every tick. For those,
+        -- DRAP may turn a box ON but must never force the entry flag off, and
+        -- must not override the engine's END flag either. Both rules were
+        -- measured in game; see docs/Kent_flag_tests.md.
         name = "side-display", priority = 45,
         collect = function(ctx, claim)
             if ctx.endgame or not ctx.activated then return end
@@ -356,9 +406,74 @@ function M.build(deps)
                         end
                     end
                     if show then
-                        for _, f in ipairs(boxes) do claim(f, "on") end
-                        if data.disp_end_flag then
+                        -- Engine-owned boxes get NO show claim either: the
+                        -- engine sets their entry flags itself (2507 on its
+                        -- schedule, 2508/2509 in the completion handoff
+                        -- cluster), and DRAP setting one EARLY pre-empts
+                        -- that handoff -- the queue enqueues the entry as
+                        -- StateSub NONE before the engine can create-and-
+                        -- activate it, and the day never becomes ready
+                        -- (vanilla-order day-2 no-spawn, measured via
+                        -- drap_kent_scq 2026-08-22).
+                        if data.engine_owns_box then
+                            -- no claim in either direction
+                        else
+                            for _, f in ipairs(boxes) do claim(f, "on") end
+                        end
+                        -- Holding END off keeps a shown box alive, but on an
+                        -- engine-owned box it overrides the engine's own end
+                        -- for the display. Measured on Kent day 1: the engine
+                        -- sets DISP_END20 about a minute before the player
+                        -- finishes, DRAP cleared it 0.25s later, and the scoop
+                        -- then closed through the TIMEOUT path -- FINISH and
+                        -- NPC21_FIRST_TIMEOUT set together, SUCCESS never set,
+                        -- "Scoop Chance Lost" on screen.
+                        if data.disp_end_flag and not data.engine_owns_box then
                             claim(data.disp_end_flag, "off")
+                        end
+                    elseif data.engine_owns_box then
+                        -- Retire it with its END flag, never by clearing the
+                        -- ENTRY flag: the engine re-asserts a cleared entry
+                        -- flag within a frame and every rising edge enqueues
+                        -- ANOTHER display entry, filling the side panel.
+                        --
+                        -- ONLY while the scoop has never been received. Once
+                        -- it is ours the END flag belongs to the engine again:
+                        -- disable_on_unlock clears it once at unlock, and a
+                        -- scoop can sit unlocked-but-not-shown for a long time
+                        -- (prerequisites, conflict group), so re-asserting
+                        -- here would undo that one-shot clear and the box
+                        -- could never come back.
+                        --
+                        -- Getting the box back is not this policy's job. A
+                        -- per-tick "END off" while shown is what overrode the
+                        -- engine's own ending and made day 1 time out.
+                        --
+                        -- The END claim itself is ONLY for a scoop we have
+                        -- never been given. A received-but-not-shown day
+                        -- (conflict-blocked, prerequisites pending) and a
+                        -- completed one both keep their box state: their END
+                        -- flag is the engine's, and disable_on_unlock already
+                        -- cleared it once at unlock.
+                        --
+                        -- The invariant is that an engine-owned box NEVER
+                        -- reaches the entry-clearing branch below, whatever
+                        -- its state.
+                        --
+                        -- And NEVER assert a box-end living in the psycho
+                        -- appear/timeout block (1153..1182): those are
+                        -- engine spawn-state records, and holding one on
+                        -- suppresses spawns. Pride's box-end is 1155
+                        -- (EM45_THIRD_APPEAR); asserting it stopped day-2
+                        -- Kent's set from placing in vanilla order
+                        -- (measured 2026-08-22). Cost: that box may show
+                        -- early -- one early box beats a broken spawn.
+                        if data.disp_end_flag
+                                and not (data.disp_end_flag >= 1153
+                                         and data.disp_end_flag <= 1182)
+                                and not ctx.is_active(scoop_name)
+                                and not ctx.is_completed(scoop_name) then
+                            claim(data.disp_end_flag, "on")
                         end
                     else
                         for _, f in ipairs(boxes) do claim(f, "off") end

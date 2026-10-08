@@ -16,6 +16,7 @@ class DRItemCategory(IntEnum):
     SKILL = 8,         # 21 player-skill items (Useful)
     UPGRADE = 9,       # 6 progressive stat upgrades (Useful)
     BUFF = 10,         # 7 filler buff items (juice effects + Heal/Berserker/PP)
+    KILL_FILLER = 11,  # KillSanity's own filler; never in the ordinary pool
 
 
 class DRItemData(NamedTuple):
@@ -208,6 +209,10 @@ _all_items = [DRItemData(row[0], row[1], row[2]) for row in [
     ("Toolbox", 162, DRItemCategory.WEAPON),
     ("Toy Cube", 163, DRItemCategory.WEAPON),
     ("Toy Laser Sword", 164, DRItemCategory.WEAPON),
+    # ITEM_NO_ROCKET_R. Its name was blank in drdr_shared.json, so nothing
+    # could register it and it was never obtainable -- while "Kill 100
+    # zombies with an RPG" has always been a location.
+    ("Rocket Launcher", 205, DRItemCategory.WEAPON),
     ("TV", 165, DRItemCategory.WEAPON),
     ("Vase", 166, DRItemCategory.WEAPON),
     ("Water Gun", 167, DRItemCategory.WEAPON),
@@ -342,10 +347,8 @@ _all_items = [DRItemData(row[0], row[1], row[2]) for row in [
     ("The Woman Left Behind", 3115, DRItemCategory.SCOOP),
     ("A Woman in Despair", 3116, DRItemCategory.SCOOP),
 
-    # Psychopath Scoops
-    ("Cut from the Same Cloth", 3200, DRItemCategory.SCOOP),
-    ("Photo Challenge", 3201, DRItemCategory.SCOOP),
-    ("Photographer's Pride", 3202, DRItemCategory.SCOOP),
+    # Psychopath Scoops. 3200-3202 were Kent's three days, now Progressive
+    # Kent Scoop below; the ids stay retired.
     ("Cletus", 3203, DRItemCategory.SCOOP),
     ("The Convicts", 3204, DRItemCategory.SCOOP),
     ("Out of Control", 3205, DRItemCategory.SCOOP),
@@ -355,6 +358,9 @@ _all_items = [DRItemData(row[0], row[1], row[2]) for row in [
     ("Long Haired Punk", 3209, DRItemCategory.SCOOP),
     ("Mark of the Sniper", 3210, DRItemCategory.SCOOP),
     ("The Cult", 3211, DRItemCategory.SCOOP),
+    # Kent's three days come as copies of this under ScoopSanity: the Nth
+    # copy unlocks day N, so the days always arrive in order.
+    ("Progressive Kent Scoop", 3212, DRItemCategory.SCOOP),
 
     # Player skills (21) — handled by DRAP/effects/PlayerStats.lua
     # Each maps to a bit in PSM.PlayerSkill (PL_SKILL_BITS).
@@ -403,7 +409,7 @@ _all_items = [DRItemData(row[0], row[1], row[2]) for row in [
     # All trap items end with "Trap" so they're obviously traps in the AP UI.
     ("Stomach Ache Trap",   4070, DRItemCategory.TRAP),
     ("Zombait Trap",        4071, DRItemCategory.TRAP),
-    ("Slow Trap",           4072, DRItemCategory.TRAP),
+    ("Skipped Leg Day Trap", 4072, DRItemCategory.TRAP),
     ("Damage Player Trap",  4073, DRItemCategory.TRAP),
     ("Hostile NPC Trap",    4074, DRItemCategory.TRAP),
     ("Special Forces Trap", 4075, DRItemCategory.TRAP),
@@ -411,8 +417,32 @@ _all_items = [DRItemData(row[0], row[1], row[2]) for row in [
     # exists in that mode. BuildItemPool drops it otherwise.
     ("Convicts Respawn Trap", 4076, DRItemCategory.TRAP),
 
-    # Overtime suppressant ingredients. The mod holds the pickup until the
-    # matching item arrives, so all eight are needed to hand them in.
+    # Inventory traps (DRAP/effects/InventoryTraps.lua). Each declines and is
+    # re-banked when the inventory is empty, so none is ever wasted.
+    ("Butterfingers Trap",  4077, DRItemCategory.TRAP),
+    ("Last Shot Trap",      4078, DRItemCategory.TRAP),
+    ("Where'd Your Inventory Go? Trap", 4079, DRItemCategory.TRAP),
+
+    # Costume traps (DRAP/effects/CostumeTraps.lua). Not reverted -- the
+    # changing rooms are the way out, same as any other outfit.
+    ("Bald Trap",           4080, DRItemCategory.TRAP),
+    ("Goddamnit, Donut! Trap", 4081, DRItemCategory.TRAP),
+    ("Boxers Trap",         4082, DRItemCategory.TRAP),
+
+    # Timed traps (DRAP/effects/PlayerBuffs.lua), alongside Skipped Leg Day Trap.
+    ("Skipped Arm Day Trap", 4083, DRItemCategory.TRAP),
+    ("Oops More Zombies Trap", 4084, DRItemCategory.TRAP),
+    ("Potty Mouth Trap",    4085, DRItemCategory.TRAP),
+
+    # special_forces_mode = item. A scoop so it shows in the scoop list with
+    # hover text; unlocking it sets flag 309 and the Overtime soldiers arrive.
+    # It completes on BOTH of its checks, so the checks send them home.
+    # Added to the pool ONLY in that mode -- see BuildItemPool.
+    ("Special Forces", 4086, DRItemCategory.SCOOP),
+
+    # Overtime suppressant ingredients. No longer items -- the checks come
+    # from the pickup flags instead, so nothing holds them. Kept here so the
+    # IDs stay put for anything already reading the table.
     ("Blender", 5000, DRItemCategory.LOCK),
     ("First Aid Kit", 5001, DRItemCategory.LOCK),
     ("Coffee Filters", 5002, DRItemCategory.LOCK),
@@ -421,10 +451,27 @@ _all_items = [DRItemData(row[0], row[1], row[2]) for row in [
     ("Developing Solution", 5005, DRItemCategory.LOCK),
     ("Perfume Bottle", 5006, DRItemCategory.LOCK),
     ("Cold Spray", 5007, DRItemCategory.LOCK),
-    # Isabela will not leave for the Cave without it.
-    ("Cave Key", 5008, DRItemCategory.LOCK),
+    # Isabela will not leave for the tunnel without it.
+    ("Clock Tower Tunnel Key", 5008, DRItemCategory.LOCK),
     # The Humvee will not start without it.
     ("Humvee Key", 5009, DRItemCategory.LOCK),
+    # Car Keys: one per drivable vehicle type. Both motorcycles share the one
+    # key -- the game gives them the same RIDE_CAR_TYPE, so there is nothing to
+    # tell them apart even if we wanted to.
+    ("Sedan Key", 5010, DRItemCategory.LOCK),
+    ("Sports Car Key", 5011, DRItemCategory.LOCK),
+    ("Truck Key", 5012, DRItemCategory.LOCK),
+    ("Motorcycle Key", 5013, DRItemCategory.LOCK),
+    # The convicts' vehicle. Shares its RIDE_CAR_TYPE with the Overtime
+    # Humvee, so the runtime tells them apart by GameObject name.
+    ("Convict Humvee Key", 5014, DRItemCategory.LOCK),
+
+    # KillSanity filler. One per kill location, most of them placed straight
+    # back onto kill locations so the multiworld pool is not flooded. They do
+    # nothing in the game beyond existing.
+    ("Zombie Guts", 5020, DRItemCategory.KILL_FILLER),
+    ("Brains", 5021, DRItemCategory.KILL_FILLER),
+    ("Rotten Flesh", 5022, DRItemCategory.KILL_FILLER),
     # Note: Night Mode + Hardcore Zombies are NOT items — they are YAML
     # options (`night_mode_enabled`, `hardcore_zombies_enabled` in Options.py)
     # applied at slot-connect by DRAP/effects/ZombieEffects.lua.
@@ -433,6 +480,9 @@ _all_items = [DRItemData(row[0], row[1], row[2]) for row in [
 item_descriptions = {}
 
 item_dictionary = {item_data.name: item_data for item_data in _all_items}
+
+kill_filler_items = [item.name for item in _all_items
+                     if item.category == DRItemCategory.KILL_FILLER]
 
 # Specialty items that must be included in the pool for Restricted mode
 # These are required for specific scoops/psychopaths and are progression when RestrictedItemMode is enabled
@@ -448,16 +498,57 @@ specialty_items = {
     "Shotgun",
     "Sniper Rifle",
     "Submachine Gun",
-    # Required for Kent Day 2 in restricted_item_mode:
+    # "Kill 100 zombies with an RPG" in restricted_item_mode: either the RPG
+    # itself in Overtime, or the two halves the blender turns into one.
+    "Rocket Launcher",
+    "Mega Buster",
+    # Required for Kent Day 2 and Costume Party in restricted_item_mode.
+    # The Ghoul mask is the Entrance Plaza one; the other three are in
+    # Paradise Plaza.
     "Novelty Mask (Bear)",
     "Novelty Mask (Horse)",
     "Novelty Mask (Servbot)",
+    "Novelty Mask (Ghoul)",
     # Required for PP-bonus location gating in restricted_item_mode:
     "Frying Pan",      # gates "Heat a pan on N stoves" locations
     "Uncooked Pizza",  # gates "Use N Microwaves" (alongside Raw Meat)
     "Raw Meat",        # gates "Use N Microwaves" (alongside Uncooked Pizza)
     # Required for Honey Hunt in restricted_item_mode:
     "Queen",
+    # Something to kill 500+ zombies in an area with, for the Zombie Kill
+    # Tiers checks. Only restricted mode needs them in the pool -- everywhere
+    # else these are lying on the floor, so those checks lean on how much of
+    # the mall is open instead. Handgun/Shotgun/Submachine Gun are above.
+    "Katana",
+    "Hunting Knife",
+    "Sledgehammer",
+    "Machete",
+    "Baseball Bat",
+    "Fire Ax",
+    "Small Chainsaw",
+}
+
+# DRItemCategory.WEAPON means "anything Frank can hold", not "weapon" -- the
+# frying pan, Kent's masks and Paul's fire extinguisher all sit in it. Spitter
+# Only drops the category, so anything in it that a check still needs has to be
+# named here. Everything else those items gated is dropped as a location
+# instead (SPITTER_EXCLUDED_LOCATIONS); the queen is the one kept, because
+# handing Isabela a bee is not swinging anything.
+spitter_kept_weapons = {
+    "Queen",
+}
+
+# Kent's days, in the order the Progressive Kent Scoop copies unlock them.
+PROGRESSIVE_KENT = "Progressive Kent Scoop"
+KENT_DAYS = ["Cut from the Same Cloth", "Photo Challenge", "Photographer's Pride"]
+
+
+# Upgrades with nothing to improve once the weapons are gone. Melee is meant
+# to be barely worth swinging in this mode, and there is nothing left to
+# throw, so both would be dead slots in the pool.
+spitter_dropped_upgrades = {
+    "Progressive Attack Upgrade",
+    "Progressive Throw Upgrade",
 }
 
 # Food items that stand in for Seon's Food and Stuff access in the
@@ -491,6 +582,7 @@ overpowered_items = {
     "Book [Martial Arts]",          # massively-boosted unarmed damage
     "Laser Sword",                  # high-damage, high-durability weapon
     "Real Mega Buster",             # high-damage ranged weapon
+    "Rocket Launcher",              # one-shots almost anything
 }
 
 # Skill items that gate logic when Options.enable_skill_items is on, and
@@ -548,15 +640,25 @@ def BuildItemPool(multiworld, count, options, excluded_scoop_names=(),
         "DAY2_06_AM", "DAY2_11_AM", "DAY3_00_AM", "DAY3_11_AM", "DAY4_12_PM"
     }
 
+    # Sets have no stable order between processes and the pool is shuffled
+    # at the end, so iterating one unsorted gave the same seed a different
+    # item pool on another run.
     if options.guaranteed_items.value:
-        for item_name in options.guaranteed_items.value:
+        for item_name in sorted(options.guaranteed_items.value):
             item = item_dictionary[item_name]
             item_pool.append(item)
             included_itemcount = included_itemcount + 1
     remaining_count = count - included_itemcount
 
+    spitter_only = bool(getattr(options, "spitter_only",
+                                type("X", (), {"value": False})()).value)
+
     if options.restricted_item_mode.value:
-        for item_name in specialty_items:
+        for item_name in sorted(specialty_items):
+            # Spitter Only forces Restricted on, and most of the specialty
+            # list is there to satisfy checks it has just dropped.
+            if spitter_only and item_name not in spitter_kept_weapons and                     item_dictionary[item_name].category == DRItemCategory.WEAPON:
+                continue
             item = item_dictionary[item_name]
             item_pool.append(item)
             remaining_count = remaining_count - 1
@@ -571,11 +673,25 @@ def BuildItemPool(multiworld, count, options, excluded_scoop_names=(),
         remaining_count = remaining_count - 1
         included_itemcount = included_itemcount + 1
 
+    # Book [Blender] is the one thing both RPG routes need, and on any goal
+    # without Overtime it is the only route -- so one has to exist in every
+    # mode, the same reasoning as the Queen above.
+    if "Book [Blender]" not in (options.guaranteed_items.value or {}):
+        item = item_dictionary["Book [Blender]"]
+        item_pool.append(item)
+        remaining_count = remaining_count - 1
+        included_itemcount = included_itemcount + 1
+
     itemList = [item for item in _all_items]
     lockList = [item for item in _all_items if item.category == DRItemCategory.LOCK]
     scoopList = [item for item in _all_items if item.category == DRItemCategory.SCOOP]
+    # "Special Forces" is a scoop only in special_forces_mode = item. In none
+    # and permanent it must not reach the pool at all -- in permanent the mode
+    # turns the soldiers on directly, so an item that also turns them on would
+    # be a no-op the player still has to find.
+    if int(getattr(options.special_forces_mode, "value", 0)) != 1:
+        scoopList = [item for item in scoopList if item.name != "Special Forces"]
     consumableList = [item for item in _all_items if item.category == DRItemCategory.CONSUMABLE]
-    weaponList = [item for item in _all_items if item.category == DRItemCategory.WEAPON]
     skillList = [item for item in _all_items if item.category == DRItemCategory.SKILL]
     upgradeList = [item for item in _all_items if item.category == DRItemCategory.UPGRADE]
     buffList = [item for item in _all_items if item.category == DRItemCategory.BUFF]
@@ -588,14 +704,33 @@ def BuildItemPool(multiworld, count, options, excluded_scoop_names=(),
     if not options.scoop_sanity:
         trapList = [item for item in trapList
                     if item.name != "Convicts Respawn Trap"]
+    # Player's own list. An empty set means no traps at all, which is the same
+    # as a trap percentage of zero -- honoured rather than treated as "unset",
+    # because emptying the list is a deliberate thing to do.
+    _enabled_traps = getattr(options, "enabled_traps", None)
+    if _enabled_traps is not None:
+        _keep = set(_enabled_traps.value)
+        trapList = [item for item in trapList if item.name in _keep]
     nonTrapFiller = [item for item in itemList if item.category in (
         DRItemCategory.MISC, DRItemCategory.WEAPON, DRItemCategory.CONSUMABLE,
         DRItemCategory.BUFF
     )]
 
+    # Spitter Only: nothing to swing. Food and magazines are CONSUMABLE and
+    # survive, which leaves the filler shorter -- the fill loop reshuffles on
+    # wrap-around, so it just repeats sooner.
+    if spitter_only:
+        nonTrapFiller = [it for it in nonTrapFiller
+                         if it.category != DRItemCategory.WEAPON
+                         or it.name in spitter_kept_weapons]
+
     # Strip overpowered filler entries when the option is on. Guaranteed
-    # Items (added unconditionally above) and Restricted-mode specialty
-    # items (none of which overlap with overpowered_items) are unaffected.
+    # Items (added unconditionally above) and Restricted-mode specialty items
+    # are unaffected -- this only filters the filler list.
+    #
+    # Rocket Launcher is overpowered AND a Restricted specialty: excluding it
+    # drops the filler copies while the guaranteed one survives, so the RPG
+    # check stays reachable.
     if getattr(options, "exclude_overpowered_items",
                type("X", (), {"value": False})()).value:
         nonTrapFiller = [it for it in nonTrapFiller if it.name not in overpowered_items]
@@ -608,21 +743,30 @@ def BuildItemPool(multiworld, count, options, excluded_scoop_names=(),
     # so they would be items with nothing to open.
     overtime_gating_on = bool(getattr(options, "overtime_progression_gating",
                                       type("X", (), {"value": False})()).value)
+    # Dropped as items entirely: their checks read the pickup flags now.
+    suppressant_names = {
+        "Blender", "First Aid Kit", "Coffee Filters", "Magnifying Glass",
+        "Camp Stove", "Developing Solution", "Perfume Bottle", "Cold Spray",
+    }
     overtime_item_names = {
-        "Blender",
-        "First Aid Kit",
-        "Coffee Filters",
-        "Magnifying Glass",
-        "Camp Stove",
-        "Developing Solution",
-        "Perfume Bottle",
-        "Cold Spray",
-        "Cave Key",
+        "Clock Tower Tunnel Key",
         "Humvee Key",
     }
+    # Only exist when Car Keys is on; without it nothing locks the vehicles,
+    # so they would be items with nothing to open.
+    car_key_names = {
+        "Sedan Key", "Sports Car Key", "Truck Key", "Motorcycle Key",
+        "Convict Humvee Key",
+    }
+    car_keys_on = bool(getattr(options, "car_keys",
+                               type("X", (), {"value": False})()).value)
 
     for lock in lockList:
+        if lock.name in suppressant_names:
+            continue
         if lock.name in overtime_item_names                 and (options.goal.value != 0 or not overtime_gating_on):
+            continue
+        if lock.name in car_key_names and not car_keys_on:
             continue
         # Area keys are precollected under door randomization, and replaced by
         # the per-door keys under Split Keys
@@ -648,6 +792,9 @@ def BuildItemPool(multiworld, count, options, excluded_scoop_names=(),
     if options.scoop_sanity:
         excluded = set(excluded_scoop_names)
         for scoop in scoopList:
+            # Kent's days go in below as Progressive Kent Scoop copies.
+            if scoop.name in KENT_DAYS or scoop.name == PROGRESSIVE_KENT:
+                continue
             # Skip "Out of Control" if door randomizer is also enabled (it's precollected for softlock prevention)
             if options.door_randomizer and scoop.name == "Out of Control":
                 continue
@@ -657,6 +804,12 @@ def BuildItemPool(multiworld, count, options, excluded_scoop_names=(),
                 continue
             item = item_dictionary[scoop.name]
             item_pool.append(item)
+            remaining_count = remaining_count - 1
+            included_itemcount = included_itemcount + 1
+        for day in KENT_DAYS:
+            if day in excluded:
+                continue
+            item_pool.append(item_dictionary[PROGRESSIVE_KENT])
             remaining_count = remaining_count - 1
             included_itemcount = included_itemcount + 1
 
@@ -692,6 +845,8 @@ def BuildItemPool(multiworld, count, options, excluded_scoop_names=(),
     if getattr(options, "enable_stat_items",
                type("X", (), {"value": True})()).value and progression_mode != 0:
         for upg in upgradeList:
+            if spitter_only and upg.name in spitter_dropped_upgrades:
+                continue
             base, extra = UPGRADE_COUNTS.get(upg.name, (0, 0))
             count_to_add = 0
             if progression_mode == 1:   # replace

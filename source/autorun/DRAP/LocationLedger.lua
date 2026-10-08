@@ -105,12 +105,29 @@ function M.is_init()
 end
 
 --- Records a locally-detected check. Persists immediately when new.
+---
+--- A name the ledger only knew from the server (another world collected it)
+--- is claimed for the player when they then do it themselves: its source
+--- changes, it stays acked, nothing is re-sent. Without this the early
+--- return below kept it "server" for good, so goal counts and scoop
+--- completions never saw it -- a collected "Kill 10 Special Forces" left
+--- the soldiers in the mall after the player killed ten and shot the
+--- helicopter down (report 2026-09-20).
 --- @param name string Location name
 --- @param source string|nil Where it came from (default "check")
 --- @return boolean true if this is a NEW entry
 function M.record(name, source)
     if not L or type(name) ~= "string" or name == "" then return false end
-    if L.locations[name] then return false end
+    local existing = L.locations[name]
+    if existing then
+        source = source or "check"
+        if existing.source == "server" and source ~= "server" then
+            existing.source = source
+            existing.detected_at = os.time()
+            save()
+        end
+        return false
+    end
     L.locations[name] = {
         source = source or "check",
         detected_at = os.time(),
@@ -123,6 +140,30 @@ end
 --- Has this location ever been detected (locally or via server import)?
 function M.is_checked(name)
     return L ~= nil and L.locations[name] ~= nil
+end
+
+--- Did THIS runtime detect it, rather than the server telling us about it?
+---
+--- The server's checked list includes locations collected on the player's
+--- behalf when another world finishes and releases its items. is_checked
+--- cannot tell those apart, so counting with it hands a player goal progress
+--- they never played -- 17 of 25 kills from two actual kills, in the run that
+--- found this.
+---
+--- Entries we recorded keep source "check" or "pre-connect"; mark_acked only
+--- stamps "server" on names we did not already know, and never rewrites the
+--- source of one we did.
+---
+--- Caveat: if the ledger file is lost, our own checks come back from the
+--- server as "server" and stop counting. The ledger is per slot and seed and
+--- is written on every new entry, so that is rare -- and it fails by
+--- understating progress, which the player can still earn back, rather than
+--- by handing them a win they did not.
+function M.is_checked_locally(name)
+    if not L then return false end
+    local entry = L.locations[name]
+    if not entry then return false end
+    return entry.source ~= "server"
 end
 
 --- Marks a location as server-confirmed. Batched: call flush() after.

@@ -4,7 +4,7 @@
 --
 -- Three effect categories:
 --   * Juice-driven (5 buffs + 2 traps) -- engine-native, self-managing timers.
---   * Custom-timed (Berserker Mode, Slow Trap) -- save baseline, apply, restore.
+--   * Custom-timed (Berserker Mode, Skipped Leg Day Trap) -- save baseline, apply, restore.
 --   * Instant (Heal, Player Damage, PP Boost) -- single function call.
 
 local M = {}
@@ -45,8 +45,29 @@ local DAMAGE_AMOUNT = 2000
 local DAMAGE_HP_FLOOR = 1000
 -- Berserker Mode attack% target (and paired Buttobi computed from it)
 local BERSERKER_ATTACK_PCT = 1000
--- Slow Trap multiplier on LevelSpeedMax
+-- Skipped Leg Day Trap multiplier on LevelSpeedMax
 local SLOW_TRAP_MULT = 0.5
+
+-- Skipped Arm Day: attack percent while the trap runs. 1 is the floor rather
+-- than 0 -- zero attack risks a divide in the damage maths, and 1% already
+-- means nothing dies.
+local ARM_DAY_ATTACK_PCT = 1
+local ARM_DAY_DURATION   = 30.0
+
+-- Oops More Zombies: multiplies whatever the run is ALREADY using, so it
+-- stacks on a slot-data multiplier instead of overwriting it.
+local ZOMBIE_TRAP_FACTOR   = 2
+local ZOMBIE_TRAP_DURATION = 60.0
+
+-- Potty Mouth: Frank's frustration bark. The id is a Wwise EVENT backed by a
+-- random container, so repeats give different lines rather than one on a loop.
+-- seCallTankVoice is the safe overload -- its siblings take a Nullable vec3
+-- and passing nil for that crashed the game.
+local FRANK_BARK_SE_ID   = 226669665
+local POTTY_DURATION     = 30.0
+-- Spacing is deliberate. Breaking an inventory quickly took the game down
+-- inside Wwise, and a bark every frame is the same mistake with a nicer name.
+local POTTY_INTERVAL     = 1.0
 -- Vanilla LevelSpeedMax baseline (captured from PlayerLvUpUserData)
 local VANILLA_SPEED_TABLE = { 1.2, 1.3, 1.4 }
 
@@ -128,7 +149,7 @@ local function _trigger_juice(slot_idx, duration)
 end
 
 ------------------------------------------------------------
--- Custom-timed effect state (Berserker Mode + Slow Trap)
+-- Custom-timed effect state (Berserker Mode + Skipped Leg Day Trap)
 -- Each entry: { expires_at, saved_state, restore_fn }
 ------------------------------------------------------------
 
@@ -262,6 +283,25 @@ end
 
 function M.is_god_mode() return god_mode end
 
+-- Potty Mouth state. Kept out of _timed_effects because it has nothing to
+-- restore -- it just stops.
+local _potty = { until_at = 0, next_at = 0 }
+
+--- One frustration bark from Frank, on the frame thread.
+--- Sound MUST be played from a frame: the same call from the console reports
+--- success and is silent, which cost a long stretch of the audio work.
+local function _fire_bark()
+    local sm = sdk.get_managed_singleton("app.solid.SoundManager")
+    if not sm then return false end
+    local pm = sdk.get_managed_singleton(PM_TYPE)
+    local go = pm and select(2, pcall(function() return pm:call("get_CurrentPlayer") end))
+    if not go then return false end
+    return pcall(function()
+        sm:call("seCallTankVoice(System.UInt32, via.GameObject)",
+            FRANK_BARK_SE_ID, go)
+    end)
+end
+
 re.on_frame(function()
     if god_mode then
         local now = os.clock()
@@ -273,6 +313,18 @@ re.on_frame(function()
             _set_god_run(GOD_RUN_LEVEL)                  -- ditto run level
         end
     end
+    -- Potty Mouth: one bark every POTTY_INTERVAL until the window closes.
+    if _potty.until_at > 0 then
+        local now = os.clock()
+        if now >= _potty.until_at then
+            _potty.until_at = 0
+            log("'Potty Mouth Trap' expired")
+        elseif now >= _potty.next_at then
+            _potty.next_at = now + POTTY_INTERVAL
+            _fire_bark()
+        end
+    end
+
     if next(_timed_effects) == nil then return end
     local now = os.clock()
     for name, entry in pairs(_timed_effects) do
@@ -402,6 +454,62 @@ function M.player_damage(amount)
     _notify_trap("Damage Player Trap", string.format("-%d HP", amount))
 end
 
+--- Damage that is allowed to finish the job.
+---
+--- The Damage Player Trap clamps at DAMAGE_HP_FLOOR because addDamage taking
+--- HP to 0 leaves the player undead -- HP<=0 with no death or respawn, which
+--- needs a restart. DamageLink is meant to be able to kill, so the last hit
+--- goes through the game's own death instead of through HP: damage down to
+--- the floor, then playerDead().
+---
+--- @param amount integer HP to remove
+--- @param reason string for the death log if it lands
+--- @return string "damaged", "killed", or "unavailable"
+function M.player_damage_or_kill(amount, reason)
+    amount = tonumber(amount) or DAMAGE_AMOUNT
+    local psm = _psm()
+    local hpc = _hpc()
+    if not psm or not hpc then return "unavailable" end
+
+    local cur
+    pcall(function() cur = psm:call("getVitalNew") end)
+    cur = tonumber(cur)
+
+    -- A failed HP read must not read as "lethal" -- that would kill on a bad
+    -- read rather than on real damage. Unknown HP takes the ordinary path.
+    if not cur then
+        pcall(function() hpc:call("addDamage", amount) end)
+        log(string.format("%s: -%d HP (current HP unknown)",
+            tostring(reason or "damage"), amount))
+        return "damaged"
+    end
+
+    -- Not lethal: ordinary damage, same as the trap.
+    if cur and (cur - amount) >= DAMAGE_HP_FLOOR then
+        pcall(function() hpc:call("addDamage", amount) end)
+        log(string.format("%s: -%d HP (%d -> %d)",
+            tostring(reason or "damage"), amount, cur, cur - amount))
+        return "damaged"
+    end
+
+    -- Lethal. Take what can safely be taken so the health bar shows the hit,
+    -- then let the game kill him.
+    if cur and cur > DAMAGE_HP_FLOOR then
+        pcall(function() hpc:call("addDamage", cur - DAMAGE_HP_FLOOR) end)
+    end
+
+    local DeathLink = require("DRAP/trackers/DeathLink")
+    if DeathLink and DeathLink.kill_player then
+        DeathLink.kill_player(reason or "damage")
+        log(string.format("%s: lethal -- killed rather than written to 0",
+            tostring(reason or "damage")))
+        return "killed"
+    end
+
+    log(string.format("%s: lethal but no death path available", tostring(reason or "damage")))
+    return "unavailable"
+end
+
 function M.pp_boost(amount)
     amount = tonumber(amount) or 5000
     local psm = _psm()
@@ -460,11 +568,90 @@ function M.berserker_mode(sec)
 end
 
 -- 30s @ 0.5x speed (multiplies the LevelSpeedMax table). Auto-restores.
+--- Skipped Arm Day: Frank hits like a wet paper bag for 30 seconds.
+---
+--- The override lives in PlayerStats rather than being written straight to the
+--- engine, because PlayerStats.apply() is idempotent and hook-driven -- a save,
+--- load or level-up during the window would otherwise restore full attack and
+--- silently cancel the trap. Routing it through PlayerStats also means the
+--- restore is "clear the override and re-apply", which recomputes the correct
+--- value from baseline plus upgrades instead of a remembered number that may
+--- be stale by then.
+function M.arm_day_trap(sec)
+    sec = tonumber(sec) or ARM_DAY_DURATION
+    local PlayerStats = package.loaded["DRAP/effects/PlayerStats"]
+        or require("DRAP/effects/PlayerStats")
+    if not (PlayerStats and PlayerStats.set_attack_override) then
+        log("Skipped Arm Day Trap: PlayerStats override unavailable")
+        return
+    end
+    _start_timed("Skipped Arm Day Trap", sec,
+        function() return true end,
+        function()
+            PlayerStats.set_attack_override(ARM_DAY_ATTACK_PCT)
+            _notify_trap("You skipped arm day.")
+            log(string.format("Skipped Arm Day Trap: attack %d%% for %.0fs",
+                ARM_DAY_ATTACK_PCT, sec))
+        end,
+        function()
+            PlayerStats.clear_attack_override()
+        end)
+end
+
+--- Oops More Zombies: double the spawn multiplier for a minute.
+---
+--- Doubles whatever the run is ALREADY using, so it stacks on a slot-data
+--- multiplier rather than replacing it. The target is computed from the SAVED
+--- value every time apply runs, so a second copy landing mid-window extends
+--- the timer without doubling again -- _start_timed keeps the original capture
+--- and re-runs apply.
+function M.zombie_swarm_trap(sec)
+    sec = tonumber(sec) or ZOMBIE_TRAP_DURATION
+    local Zombies = package.loaded["DRAP/effects/ZombieEffects"]
+        or require("DRAP/effects/ZombieEffects")
+    if not (Zombies and Zombies.set_spawn_multiplier) then
+        log("Oops More Zombies Trap: ZombieEffects unavailable")
+        return
+    end
+    local NAME = "Oops More Zombies Trap"
+    _start_timed(NAME, sec,
+        function()
+            local cur = Zombies.get_spawn_multiplier and Zombies.get_spawn_multiplier()
+            return tonumber(cur) or 1
+        end,
+        function()
+            local entry = _timed_effects[NAME]
+            local base = (entry and tonumber(entry.saved)) or 1
+            Zombies.set_spawn_multiplier(base * ZOMBIE_TRAP_FACTOR)
+            _notify_trap("Oops, more zombies.")
+            log(string.format("%s: %dx -> %dx for %.0fs", NAME, base,
+                base * ZOMBIE_TRAP_FACTOR, sec))
+        end,
+        function(saved)
+            -- Back to what the run was using, not to vanilla.
+            Zombies.set_spawn_multiplier(tonumber(saved) or 1)
+        end)
+end
+
+--- Potty Mouth: Frank swears every couple of seconds for half a minute.
+---
+--- Not a _timed_effect: there is nothing to capture or restore, the barks
+--- simply stop. The id is a Wwise event backed by a random container, so the
+--- lines vary on their own.
+function M.potty_mouth_trap(sec)
+    sec = tonumber(sec) or POTTY_DURATION
+    local now = os.clock()
+    _potty.until_at = now + sec
+    _potty.next_at = now          -- first one immediately
+    _notify_trap("Frank has some choice words.")
+    log(string.format("Potty Mouth Trap: barking for %.0fs", sec))
+end
+
 function M.slow_trap(sec, multiplier)
     sec = tonumber(sec) or DEFAULT_TIMED_DURATION
     multiplier = tonumber(multiplier) or SLOW_TRAP_MULT
 
-    _start_timed("Slow Trap", sec,
+    _start_timed("Skipped Leg Day Trap", sec,
         function()
             -- capture current LevelSpeedMax values
             local ms = _move_setting()
@@ -485,16 +672,16 @@ function M.slow_trap(sec, multiplier)
         end,
         function()
             -- apply: scale baseline by multiplier
-            local saved = _timed_effects["Slow Trap"]
-                          and _timed_effects["Slow Trap"].saved
+            local saved = _timed_effects["Skipped Leg Day Trap"]
+                          and _timed_effects["Skipped Leg Day Trap"].saved
             local base = saved or VANILLA_SPEED_TABLE
             local scaled = {}
             for i, v in ipairs(base) do scaled[i] = v * multiplier end
             _set_speed_table(scaled)
             local psm = _psm()
             if psm then pcall(function() psm:call("applyPlayerValue") end) end
-            log(string.format("Slow Trap: %gx speed for %.1fs", multiplier, sec))
-            _notify_trap("Slow Trap", string.format("%gx speed for %.0fs", multiplier, sec))
+            log(string.format("Skipped Leg Day Trap: %gx speed for %.1fs", multiplier, sec))
+            _notify_trap("Skipped Leg Day Trap", string.format("%gx speed for %.0fs", multiplier, sec))
         end,
         function(saved)
             -- restore
@@ -546,8 +733,11 @@ function M.register()
                 M.pp_boost(amt)
             end },
         -- Custom traps
-        { name = "Slow Trap",          fn = M.slow_trap },
+        { name = "Skipped Leg Day Trap",          fn = M.slow_trap },
         { name = "Damage Player Trap", fn = M.player_damage },
+        { name = "Skipped Arm Day Trap", fn = M.arm_day_trap },
+        { name = "Oops More Zombies Trap", fn = M.zombie_swarm_trap },
+        { name = "Potty Mouth Trap",   fn = M.potty_mouth_trap },
     }
     -- Traps go through TrapBank instead of firing on arrival: one that lands
     -- at the title screen or mid-load used to be lost outright. Banked ones
@@ -558,8 +748,11 @@ function M.register()
     local TRAPS = {
         ["Stomach Ache Trap"]  = true,
         ["Zombait Trap"]       = true,
-        ["Slow Trap"]          = true,
+        ["Skipped Leg Day Trap"]          = true,
         ["Damage Player Trap"] = true,
+        ["Skipped Arm Day Trap"] = true,
+        ["Oops More Zombies Trap"] = true,
+        ["Potty Mouth Trap"]   = true,
     }
     local trap_n = 0
     for _, item in ipairs(items) do
@@ -602,5 +795,9 @@ _G.drap_buff_berserker    = function(s) M.berserker_mode(s) end
 _G.drap_buff_pp_boost     = function(a) M.pp_boost(a) end
 _G.drap_trap_slow         = function(s, m) M.slow_trap(s, m) end
 _G.drap_trap_damage       = function(a) M.player_damage(a) end
+
+_G.drap_trap_armday  = function(sec) M.arm_day_trap(sec) end
+_G.drap_trap_zombies = function(sec) M.zombie_swarm_trap(sec) end
+_G.drap_trap_potty   = function(sec) M.potty_mouth_trap(sec) end
 
 return M

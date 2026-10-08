@@ -64,6 +64,11 @@ TIME_KEYS: List[Dict[str, Any]] = _DATA.get("time_keys", [])
 ITEMS: List[Dict[str, Any]] = _DATA.get("items", [])
 SURVIVORS: List[Dict[str, Any]] = _DATA.get("survivors", [])
 STICKERS: List[Dict[str, Any]] = _DATA.get("stickers", [])
+# region -> {tier: [thresholds]} for the Zombie Kill Tiers option.
+# Shared because the Lua side needs the same numbers to drive the
+# feature in vanilla, where there is no slot data to send them.
+ZOMBIE_KILL_TIERS: Dict[str, Dict[str, List[int]]] = _DATA.get(
+    "zombie_kill_tiers", {})
 
 # Scoop name -> list of survivor display names rescued as part of that scoop.
 # Only includes scoops whose Lua SCOOP_DATA.npcs contains at least one name
@@ -115,6 +120,16 @@ def expand_trigger_location_names(entry: Dict[str, Any]) -> List[str]:
         return [n] if n else []
     if t == "counted":
         names: List[str] = []
+        # Entries with recorded objects name each one instead of counting
+        # them. "Use 3 Microwaves" said nothing about where it was and forced
+        # the logic to approximate regions; each instance carries its own.
+        instances = entry.get("instances")
+        if instances:
+            names = [i["name"] for i in instances if i.get("name")]
+            all_name = entry.get("all_location_name")
+            if all_name:
+                names.append(all_name)
+            return names
         max_count = int(entry.get("max_count", 0))
         sing = entry.get("location_template_singular", "")
         plur = entry.get("location_template_plural", "")

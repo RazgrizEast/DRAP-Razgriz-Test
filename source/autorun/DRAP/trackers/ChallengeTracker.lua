@@ -22,13 +22,18 @@ local ss_mgr = M:add_singleton("ss", "app.solid.SolidStorage")
 ------------------------------------------------------------
 
 local CHALLENGES = {
-    -- Queens handed to Isabela in Overtime. The fifth is Honey Hunt, which the
-    -- game flags itself, so this stops at four rather than doubling up.
+    -- Queens handed to Isabela in Overtime. The fifth is Honey Hunt, counted
+    -- here rather than left to the game: the game only marks it on answering
+    -- Yes to leaving, and Overtime gating holds that to No until the Clock
+    -- Tower Tunnel Key arrives. queenBeeCount reads 5 with the box declined.
+    -- EventTracker still sends it on mEventNo 126; checks are idempotent, so
+    -- the duplicate is a spare rather than a problem.
     queenBeeCount = {
         label   = "Queens given to Isabela",
-        targets = { 1, 2, 3, 4 },
+        targets = { 1, 2, 3, 4, 5 },
         location_ids = { "Give Isabela 1 Queen", "Give Isabela 2 Queens",
-                         "Give Isabela 3 Queens", "Give Isabela 4 Queens" },
+                         "Give Isabela 3 Queens", "Give Isabela 4 Queens",
+                         "Honey Hunt" },
     },
     PlayerLevel = {
         label   = "Reach Level",
@@ -44,6 +49,13 @@ local CHALLENGES = {
         label   = "Zombie Vehicle kills",
         targets = { 500, 1000 },
         location_ids = { "Kill 500 zombies by vehicle", "Kill 1000 zombies by vehicle" },
+        -- A lifetime total the game carries across every playthrough on the
+        -- save (44,820 on a measured save whose per-run count was 35), and
+        -- there is no per-run vehicle counter. Read against it directly,
+        -- both checks sent on the first read for anyone who had driven over
+        -- 1000 zombies before. Counted from a baseline taken at the start
+        -- of the seed instead.
+        baseline = true,
     },
     changeClothNum = {
         label   = "Outfit changes",
@@ -64,6 +76,13 @@ local CHALLENGES = {
         label   = "Zombies killed",
         targets = { 1000, 2000, 5000, 10000 },
         location_ids = { "Kill 1000 zombies", "Kill 2000 zombies", "Kill 5000 zombies", "Kill 10000 zombies" },
+        -- The save field only moves on autosave, so these fired on the next
+        -- door instead of on the kill (#60). SolidStorage keeps the same
+        -- number live; measured 2026-09-24: getZombieKillNum 6 -> 13 -> 35
+        -- as kills happened while zombieKill_1Play sat at 4, then the
+        -- autosave copied 35 across. The getter is a folded field read:
+        -- safe to call, never to hook.
+        live_getter = "getZombieKillNum",
     },
     secretForceKill = {
         label   = "Special forces killed",
@@ -169,6 +188,13 @@ local CHALLENGES = {
         targets = { 5 },
         location_ids = { "Bowl over 5 zombies" },
     },
+    -- The Costume Party achievement's own counter (SolidSave +0x194,
+    -- fed by addZombieNoveltyMaskCovered).
+    mZombieNoveltyMaskCoveredNum = {
+        label   = "Zombies in novelty masks",
+        targets = { 10 },
+        location_ids = { "Costume Party - Put novelty masks on 10 zombies" },
+    },
     VehicleJumpDistanceMax = {
         label   = "Vehicle jump distance",
         targets = { 1000 },
@@ -193,6 +219,40 @@ M.CHALLENGES = CHALLENGES
 ------------------------------------------------------------
 
 local challenge_state = {}
+
+------------------------------------------------------------
+-- Per-seed baselines for lifetime counters
+------------------------------------------------------------
+-- The first value seen in a seed is recorded in the run ledger, so a
+-- reload or a relaunch keeps counting from the same point. A value below
+-- the baseline means a different save's lifetime was loaded; the baseline
+-- moves down to it so later progress still counts.
+
+local BASELINE_SECTION = "challenge_baselines"
+
+local function ledger()
+    local ok, L = pcall(require, "DRAP/LocationLedger")
+    if ok and L and L.is_init and L.is_init() then return L end
+    return nil
+end
+
+--- The baseline for a field, recording the current value if there is none.
+--- nil until the run ledger is open (before a slot connects).
+local function baseline_for(field_name, raw)
+    local L = ledger()
+    if not L then return nil end
+    local doc = L.get_section(BASELINE_SECTION)
+    if type(doc) ~= "table" then doc = {} end
+    local b = tonumber(doc[field_name])
+    if b == nil or raw < b then
+        doc[field_name] = raw
+        L.set_section(BASELINE_SECTION, doc)
+        M.log(string.format("%s: baseline for this seed set at %d%s", field_name, raw,
+            b and string.format(" (was %d; a save with a lower lifetime was loaded)", b) or ""))
+        b = raw
+    end
+    return b
+end
 local save_td = nil
 local last_save_obj = nil
 local frame_counter = 0
@@ -276,11 +336,23 @@ local function ensure_challenge_fields(save_obj)
     return true
 end
 
-local function handle_challenge_progress(field_name, def, state, save_obj)
+local function handle_challenge_progress(field_name, def, state, save_obj, ss)
     if not state.field or not def.targets or #def.targets == 0 then return end
 
     local ok_val, v = pcall(state.field.get_data, state.field, save_obj)
     if not ok_val or type(v) ~= "number" then return end
+    if def.live_getter and ss then
+        local ok_live, live = pcall(function() return ss:call(def.live_getter) end)
+        live = ok_live and tonumber(live) or nil
+        -- Never behind the save: the live counter is the same number ahead
+        -- of the next autosave, and a failed read keeps the save value.
+        if live and live > v then v = live end
+    end
+    if def.baseline then
+        local b = baseline_for(field_name, v)
+        if b == nil then return end   -- no seed yet: nothing to count against
+        v = v - b
+    end
 
     local current = v
 
@@ -365,7 +437,7 @@ function M.on_frame()
     for field_name, def in pairs(CHALLENGES) do
         local state = challenge_state[field_name]
         if state then
-            handle_challenge_progress(field_name, def, state, save_obj)
+            handle_challenge_progress(field_name, def, state, save_obj, ss)
         end
     end
 end
@@ -403,8 +475,19 @@ local function dump_challenge(field_name)
         local ok, v = pcall(state.field.get_data, state.field, save_obj)
         if ok and type(v) == "number" then cur = tostring(v) end
     end
-    M.log(string.format("[%s] field_resolved=%s current=%s last_value=%s",
-        field_name, tostring(state.field ~= nil), cur, tostring(state.last_value)))
+    local live = ""
+    if def.live_getter and ss then
+        local ok, v = pcall(function() return ss:call(def.live_getter) end)
+        live = string.format(" live(%s)=%s", def.live_getter, ok and tostring(v) or "?")
+    end
+    if def.baseline then
+        local L = ledger()
+        local doc = L and L.get_section(BASELINE_SECTION)
+        live = live .. string.format(" baseline=%s",
+            tostring(type(doc) == "table" and doc[field_name] or nil))
+    end
+    M.log(string.format("[%s] field_resolved=%s save=%s%s last_value=%s",
+        field_name, tostring(state.field ~= nil), cur, live, tostring(state.last_value)))
     if def.targets then
         for i, t in ipairs(def.targets) do
             local loc = (def.location_ids and def.location_ids[i]) or "?"

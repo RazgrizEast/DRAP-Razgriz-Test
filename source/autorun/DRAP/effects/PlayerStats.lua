@@ -149,11 +149,27 @@ function M.set_god_run_level(level)
     end
 end
 
+-- Temporary attack override, owned here so apply() cannot undo it. A trap
+-- that wrote setPlayerAttackPercent directly would be cancelled silently by
+-- the next save, load or level-up, since apply() is idempotent and hook-driven.
+-- PlayerBuffs owns the timer; this only owns the value.
+local attack_override = nil
+-- Engine attack% captured when an override is applied while apply() is NOT
+-- running the show. Only used on that path -- see set_attack_override.
+local attack_override_saved = nil
+
+-- Spitter Only floors melee for the whole run. Kept separate from
+-- attack_override so the two compose: the Skipped Arm Day Trap can still
+-- override on top, and when that trap expires apply() recomputes back down to
+-- this floor instead of handing the player a working punch.
+local melee_floor = nil
+
 -- Compute target value for each stat (baseline + delta).
 local function _target_values()
     return {
         hp_max      = BASELINE.hp_max      + stat_deltas.hp_max,
-        attack_pct  = BASELINE.attack_pct  + stat_deltas.attack_pct,
+        attack_pct  = attack_override or melee_floor
+                      or (BASELINE.attack_pct + stat_deltas.attack_pct),
         throw_power = BASELINE.throw_power + stat_deltas.throw_power,
         run_level   = god_run_level
                       or (BASELINE.run_level + stat_deltas.run_level),
@@ -172,12 +188,110 @@ local function _skill_bitfield()
     return bits
 end
 
+--- Diagnostic: override, computed target, and what the engine actually holds.
+--- Reports all three because a write that reports success proves nothing here.
+_G.drap_stats_attack = function()
+    local psm = _psm()
+    local engine
+    if psm then
+        pcall(function() engine = psm:get_field("PlayerAttackPercent") end)
+    end
+    local t = _target_values()
+    log(string.format(
+        "attack override=%s  floor=%s  target=%s  engine=%s  active=%s  mode=%s",
+        tostring(attack_override), tostring(melee_floor),
+        tostring(t.attack_pct), tostring(engine),
+        tostring(Activation.is_active()), tostring(progression_mode)))
+end
+
+--- True when apply() actually writes. In vanilla_only, or with no slot
+--- connected, DRAP deliberately leaves the player's stats alone -- apply()
+--- returns early and would otherwise drag a 250% attack back down to baseline.
+local function _stats_managed()
+    return Activation.is_active() and progression_mode ~= "vanilla_only"
+end
+
+--- Write attack% and its paired knockback straight to the engine.
+local function _write_attack(pct)
+    local psm = _psm()
+    if not psm then return false end
+    local kb = math.floor(100 + 0.8 * (pct - 100) + 0.5)
+    pcall(function() psm:call("setPlayerAttackPercent", pct) end)
+    pcall(function() psm:call("setPlayerButtobiPercent", kb) end)
+    return true
+end
+
+--- Force attack percent until cleared. Used by the Skipped Arm Day Trap.
+---
+--- Two paths, because apply() does not always run. When DRAP is managing stats
+--- the override goes through _target_values so a save, load or level-up cannot
+--- silently cancel it. When it is NOT managing them -- vanilla_only, or no
+--- slot connected -- apply() returns early and the override would do nothing,
+--- so the value is written directly and the engine's own is remembered for the
+--- restore. A trap that quietly does nothing in one progression mode is worse
+--- than one that is a little less tidy.
+function M.set_attack_override(pct)
+    attack_override = tonumber(pct)
+    if _stats_managed() then
+        attack_override_saved = nil
+        M.apply()
+        return
+    end
+    local psm = _psm()
+    if psm and attack_override_saved == nil then
+        local cur
+        pcall(function() cur = psm:get_field("PlayerAttackPercent") end)
+        attack_override_saved = tonumber(cur)
+    end
+    _write_attack(attack_override)
+end
+
+--- Floor melee for the rest of the run. Spitter Only, not a trap: there is
+--- no timer and nothing clears it.
+function M.set_melee_floor(pct)
+    melee_floor = tonumber(pct)
+    if _stats_managed() then
+        M.apply()
+        return
+    end
+    _write_attack(attack_override or melee_floor)
+end
+
+--- Drop the override and put attack back.
+---
+--- On the managed path this recomputes from baseline plus upgrades rather than
+--- restoring a remembered number, so levelling up mid-trap gives the correct
+--- value back. On the unmanaged path there is nothing to recompute from, so
+--- the captured engine value is restored instead.
+function M.clear_attack_override()
+    attack_override = nil
+    if _stats_managed() then
+        attack_override_saved = nil
+        M.apply()
+        return
+    end
+    if melee_floor then
+        _write_attack(melee_floor)
+        attack_override_saved = nil
+        return
+    end
+    if attack_override_saved then
+        _write_attack(attack_override_saved)
+        attack_override_saved = nil
+    end
+end
+
 -- Write canonical DRAP state into the engine. Idempotent -- call any time.
 function M.apply()
     -- Both callers are sdk.hooks, which fire whether or not the frame loop
     -- is gated, and load_save() can restore a mode from an earlier run.
     if not Activation.is_active() then return end
-    if progression_mode == "vanilla_only" then return end
+    if progression_mode == "vanilla_only" then
+        -- Nothing to manage, but the floor still has to hold: a save, load or
+        -- level-up would otherwise hand melee back.
+        if melee_floor then _write_attack(attack_override or melee_floor) end
+        return
+    end
 
     local psm = _psm()
     local hpc = _hpc()

@@ -60,16 +60,16 @@ end
 -- Read player world position for door disambiguation. Returns (x, z) only
 -- since the ambiguous doorways are at the same elevation -- y is dropped to
 -- skip a needless coordinate. Returns nil if the player isn't spawned.
-local function get_player_xz()
+local function get_player_xyz()
     local pm = sdk.get_managed_singleton("app.solid.PlayerManager")
     if not pm then return nil end
     local cond = safe(function() return pm:call("get_CurrentPlayerCondition") end)
     if not cond then return nil end
     local pos = safe(function() return cond:get_field("LastPlayerPos") end)
     if not pos then return nil end
-    local x, z
-    pcall(function() x = pos.x; z = pos.z end)
-    return x, z
+    local x, y, z
+    pcall(function() x = pos.x; y = pos.y; z = pos.z end)
+    return x, y, z
 end
 
 ------------------------------------------------------------
@@ -117,7 +117,7 @@ local function resolve_door_no(scene_code, target_code)
     local candidates = AMBIGUOUS_DOOR_ANCHORS[key]
     if not candidates then return 0 end
 
-    local px, pz = get_player_xz()
+    local px, _, pz = get_player_xyz()
     if px == nil then return 0 end
 
     local best_d2, best_door = math.huge, 0
@@ -272,48 +272,172 @@ end
 -- prompt-driven toast and nothing fires twice.
 ------------------------------------------------------------
 
--- Radius around a door anchor, squared. Anchors sit within ~4.5 units of where
--- the player stands to use the door, so this triggers without having to be on
--- top of it.
+-- Where the hint speaks from: the door's own spot, the same per-door
+-- positions the door randomizer lands the player on. Eight metres with no
+-- height check fired it from a balcony a floor above the door; the engine's
+-- area-hit triggers that replaced it (3e5ba58) were worse -- they include
+-- event and tutorial entries that name a destination, so the Wonderland
+-- message came up by the Food Court crates, and the real doors are mostly
+-- rectangles with radius 0, which left their hint half a metre wide.
 --
--- The Food Court's tunnel and Wonderland doorways are only 8.8 apart, closer
--- than any radius worth using, so the nearest anchor wins rather than the
--- first in range. Standing at either door that picks the right one; standing
--- exactly between them it may name the neighbour until the player steps
--- toward one.
-local ANCHOR_RADIUS_SQ = 8.0 * 8.0
+-- The Food Court's tunnel and Wonderland doorways are only 8.8 apart, so
+-- the nearest wins rather than the first in range.
+local anchor_radius = 3.0            -- metres on the plane (drap_door_hint_radius)
+local ANCHOR_HEIGHT_BAND = 1.5
 
-local function nearest_anchor(scene, px, pz)
+local function nearest_anchor(scene, px, py, pz)
     local list = scene and _state.anchors_by_scene[scene] or nil
     if not list then return nil end
-    local best, best_d2 = nil, ANCHOR_RADIUS_SQ
+    local best, best_d2 = nil, math.huge
+    local reach2 = anchor_radius * anchor_radius
     for _, anchor in ipairs(list) do
         local dx, dz = px - anchor.x, pz - anchor.z
         local d2 = dx * dx + dz * dz
-        if d2 <= best_d2 then best, best_d2 = anchor, d2 end
+        local within = d2 <= reach2
+            and (anchor.y == nil or py == nil
+                 or math.abs(py - anchor.y) <= ANCHOR_HEIGHT_BAND)
+        if within and d2 < best_d2 then best, best_d2 = anchor, d2 end
     end
     return best
 end
 
+_G.drap_door_hint_radius = function(r)
+    if tonumber(r) then anchor_radius = tonumber(r) end
+    log(string.format("door hint radius %.1f m", anchor_radius))
+end
+
+-- The door hint waits for the first Entrance Plaza cutscene (event 2, which
+-- the engine records in EV_EVENT02_1 / EV_EVENT02_2). Before it the player
+-- is still in the opening and a door toast reads as a bug. Read
+-- from the flags, not the ledger: a new game on the same seed starts over.
+local EP_INTRO_FLAGS = { 259, 256 }
+local ep_intro_seen = false
+
+local function ep_intro_done()
+    if ep_intro_seen then return true end
+    local efm = sdk.get_managed_singleton("app.solid.gamemastering.EventFlagsManager")
+    if not efm then return false end
+    for _, id in ipairs(EP_INTRO_FLAGS) do
+        if safe(function() return efm:call("evFlagCheck", id) end) == true then
+            ep_intro_seen = true
+            return true
+        end
+    end
+    return false
+end
+
+------------------------------------------------------------
+-- Key hints
+------------------------------------------------------------
+-- A locked door raises no prompt at all, so a new player walks up to the vent
+-- or the elevator, gets nothing, and reads it as a broken game. Naming the key
+-- it wants also tells them what to hint for.
+--
+-- Built from shared data rather than slot data: the area and split-key tables
+-- already carry key_item, and split_areas lists BOTH directions of every
+-- transition, which is what makes the hint appear on either side of a door.
+
+local key_for_scene, key_for_transition = nil, nil
+
+local function build_key_tables()
+    if key_for_scene then return end
+    key_for_scene, key_for_transition = {}, {}
+    local ok, SharedData = pcall(require, "DRAP/SharedData")
+    if not ok or not SharedData then return end
+    for _, a in ipairs((SharedData.areas and SharedData.areas()) or {}) do
+        if a.scene_code and a.key_item then
+            key_for_scene[a.scene_code] = a.key_item
+        end
+    end
+    for _, sa in ipairs((SharedData.split_areas and SharedData.split_areas()) or {}) do
+        for _, t in ipairs(sa.transitions or {}) do
+            if t.origin and t.destination and sa.key_item then
+                key_for_transition[t.origin .. "|" .. t.destination] = sa.key_item
+            end
+        end
+    end
+end
+
+--- The key a door is waiting on, or nil when it is already open.
+---
+--- Asks DoorSceneLock rather than tracking received items here, so the hint
+--- disappears exactly when the door starts working -- one source of truth.
+local function locked_key_for(origin_code, dest_code)
+    if not (origin_code and dest_code) then return nil end
+    local lock = _G.AP and _G.AP.DoorSceneLock
+    if not lock then return nil end
+    build_key_tables()
+
+    if lock.get_split_keys_enabled and lock.get_split_keys_enabled() then
+        if lock.is_transition_locked
+            and lock.is_transition_locked(origin_code, dest_code) then
+            return key_for_transition[origin_code .. "|" .. dest_code]
+        end
+        return nil
+    end
+
+    if lock.is_scene_locked and lock.is_scene_locked(dest_code) then
+        return key_for_scene[dest_code]
+    end
+    return nil
+end
+
 local function show_nearby_door()
     if next(_state.anchors_by_scene) == nil then return end
-    local px, pz = get_player_xz()
+    -- Nothing at all during the Opening, not just the key part: redirects
+    -- and Door Locks would still name the Heliport's doors otherwise.
+    if not ep_intro_done() then
+        _state.last_shown_text = nil
+        return
+    end
+    local px, py, pz = get_player_xyz()
     if px == nil then return end
 
-    local anchor = nearest_anchor(get_current_scene_code(), px, pz)
+    local anchor = nearest_anchor(get_current_scene_code(), px, py, pz)
     if not anchor then
         _state.last_shown_text = nil
         return
     end
 
-    -- Unlike the prompt path there is no vanilla signboard to defer to, so an
-    -- unredirected door still gets named -- just its own destination.
+    local scene = get_current_scene_code()
+    local key = locked_key_for(scene, NAME_TO_SCENE_CODE[anchor.to])
+    -- The Security Room's mall door stays open until Jessie whatever its key.
+    local lock_mod = _G.AP and _G.AP.DoorSceneLock
+    if key and lock_mod and lock_mod.is_prologue_exempt
+        and lock_mod.is_prologue_exempt(scene, NAME_TO_SCENE_CODE[anchor.vanilla]) then
+        key = nil
+    end
+    local redirected = anchor.to ~= anchor.vanilla
+
+    -- Anchors are sent for every seed now, so this path runs even with the
+    -- randomizer off -- and naming the destination of an ordinary unlocked
+    -- door would be noise at every doorway in the mall. Speak only when there
+    -- is something the player cannot already see: a redirect, a key they are
+    -- waiting on, or Door Locks, where a locked door raises no prompt at all
+    -- and naming plain destinations is the point.
+    local lock = _G.AP and _G.AP.DoorSceneLock
+    local door_locks = (lock and lock.get_door_locks_enabled
+        and lock.get_door_locks_enabled()) or false
+    if not (redirected or key or door_locks) then
+        _state.last_shown_text = nil
+        return
+    end
+
     local text
-    if anchor.to ~= anchor.vanilla then
+    if redirected then
         text = build_overlay_text(anchor.vanilla, anchor.to)
     else
         text = Notify.span(anchor.to, "location", true)
     end
+
+    -- Say what it wants, not just where it goes.
+    if key then
+        -- Purple, not the green used for the destination in this same toast:
+        -- two bold greens read as one phrase. Purple is the AP progression
+        -- color, which is what a key is.
+        text = text .. "  --  needs " .. Notify.span(key, "progression", true)
+    end
+
     send_overlay(text)
 end
 

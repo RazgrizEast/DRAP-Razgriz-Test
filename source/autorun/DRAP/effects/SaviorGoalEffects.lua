@@ -6,7 +6,7 @@
 --
 -- Only active when AP.Goal == 2. Otherwise the module is inert.
 --
--- Counting is based on AP_BRIDGE.has_completed_check, which persists across
+-- Counting is based on AP_BRIDGE.has_local_check, which persists across
 -- disconnects, so the running total survives reconnects and crashes without
 -- needing its own save file.
 
@@ -54,12 +54,14 @@ end
 -- Count rescue checks via the bridge. Iterates known survivors so the count
 -- is bounded and doesn't pick up unrelated location names.
 local function count_rescued()
-    if not AP or not AP.AP_BRIDGE or not AP.AP_BRIDGE.has_completed_check then
+    if not AP or not AP.AP_BRIDGE or not AP.AP_BRIDGE.has_local_check then
         return 0
     end
     local n = 0
     for _, name in ipairs(survivor_universe()) do
-        if AP.AP_BRIDGE.has_completed_check("Rescue " .. name) then
+        -- has_local_check, NOT has_completed_check: the latter counts
+        -- rescues another world collected on our behalf.
+        if AP.AP_BRIDGE.has_local_check("Rescue " .. name) then
             n = n + 1
         end
     end
@@ -101,6 +103,19 @@ local function try_send_goal()
     local n = count_rescued()
     local t = target()
     if n >= t then
+        -- The check is held until an ending has played. It is what yields the
+        -- Victory item, so holding it holds the win -- the run finishes the
+        -- way the game finishes rather than just stopping here.
+        local ok, Ending = pcall(require, "DRAP/effects/EndingSequence")
+        if ok and Ending and Ending.request_ending then
+            log(string.format(
+                "Savior threshold reached (%d/%d). Holding the goal for the ending.",
+                n, t))
+            Ending.request_ending(GOAL_LOCATION_NAME)
+            goal_sent = true
+            return
+        end
+
         log(string.format("Savior threshold reached (%d/%d). Sending goal check.", n, t))
         if AP.AP_BRIDGE and AP.AP_BRIDGE.check then
             AP.AP_BRIDGE.check(GOAL_LOCATION_NAME)
@@ -135,6 +150,25 @@ function M.progress()
     return count_rescued(), target()
 end
 
+--- Whether the target from progress() is the win condition. Exported so the
+--- scoops window does not need its own copy of the goal number.
+function M.is_savior_goal()
+    return is_savior_goal()
+end
+
+--- The next milestone the player has not reached, or nil once all are done.
+---
+--- The milestones exist in every mode, not just Savior, so a run with no
+--- rescue target still has something to count towards -- which is what the
+--- scoops window shows when there is no Savior goal.
+function M.next_milestone()
+    local n = count_rescued()
+    for _, threshold in ipairs(RESCUE_MILESTONES) do
+        if n < threshold then return threshold end
+    end
+    return nil
+end
+
 function M.register_all()
     if is_savior_goal() then
         log(string.format("Savior goal active: target = %d survivors", target()))
@@ -154,8 +188,8 @@ function M.print_progress()
         log("Survivors NOT yet rescued (per bridge COMPLETED_CHECKS):")
         for _, name in ipairs(survivor_universe()) do
             local check_name = "Rescue " .. name
-            local rescued = AP and AP.AP_BRIDGE and AP.AP_BRIDGE.has_completed_check
-                          and AP.AP_BRIDGE.has_completed_check(check_name)
+            local rescued = AP and AP.AP_BRIDGE and AP.AP_BRIDGE.has_local_check
+                          and AP.AP_BRIDGE.has_local_check(check_name)
             if not rescued then
                 log("  " .. name)
             end

@@ -123,7 +123,7 @@ local TRACKED_EVENT_FLAGS = {
     [447]  = 'Kill the convicts',
     [1299] = 'Kill the convicts',
 
-    -- Inside the Cave, in the order they are opened: Isabela crawls through
+    -- Inside the tunnel, in the order they are opened: Isabela crawls through
     -- the first gate, opens the second, and the lever raises the last.
     -- Deliberately not 527 or 529 -- those pair with 528 and 530 but switch
     -- off again moments later, and these are read as levels, so a momentary
@@ -131,6 +131,15 @@ local TRACKED_EVENT_FLAGS = {
     [528]  = 'Open Gate 1',
     [530]  = 'Open Gate 2',
     [1349] = 'Raise the final gate',
+
+    -- The three camera upgrades, picked up in camera shops. Contiguous
+    -- flags, confirmed by trace: Flash in Paradise Plaza set 3461 and Focus
+    -- in North Plaza set 3463, leaving Brightness (3462) in Wonderland.
+    -- These names must match Locations.py exactly -- a rename on one side
+    -- silently sends nothing.
+    [3461] = 'Camera Part [Flash]',
+    [3462] = 'Camera Part [Brightness]',
+    [3463] = 'Camera Part [Focus]',
 
     -- The suppressant hand-in. This used to be watched as event id 131, which
     -- was never confirmed and is not this mission.
@@ -218,6 +227,17 @@ end
 ------------------------------------------------------------
 -- Location Firing
 ------------------------------------------------------------
+
+--- Forget what has been reported, for a new game. The set only lives for the
+--- session, so a run completed and then started over in the same session
+--- swallowed every repeat: Kent's day 1 finished again but ScoopUnlocker never
+--- heard, and day 2 never unlocked (RobaRising 2026-10-02). A new game starts
+--- with these flags off, so nothing replays. Older saves keep the set.
+function M.reset_sent()
+    local n = 0
+    for k in pairs(SENT_DESCRIPTIONS) do SENT_DESCRIPTIONS[k] = nil; n = n + 1 end
+    M.log(string.format("new game -- forgot %d reported location(s)", n))
+end
 
 local function maybe_fire_location(desc, source, raw_id, extra)
     if not desc then return end

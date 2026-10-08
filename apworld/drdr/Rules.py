@@ -16,14 +16,15 @@ from rule_builder.rules import (
 )
 
 from .DoorRandomization import AREA_NAMES, EMBEDDED_DOOR_DATA
-from .Locations import DRLocationCategory, location_tables
+from .Locations import (DRLocationCategory, location_tables,
+                        ZOMBIE_KILL_REGION_OF, ZOMBIE_KILL_TIERS, SURVIVOR_MILESTONES,
+                        kill_sanity_location_name)
 from .shared_data import (
     AREA_KEY_NAMES,
     SCOOP_COMPLETION_MAP, SCOOP_EVENTS, SCOOP_REGION_REQUIREMENTS,
     SCOOP_SPLIT_KEY_DOORS as SPLIT_KEY_SCOOP_DOORS,
-    AP_TRIGGER_LOCATIONS, expand_trigger_location_names,
-    trigger_location_required_regions,
 )
+from .Items import KENT_DAYS, PROGRESSIVE_KENT
 
 
 # Level requirements for each main scoop position (0-indexed) in the shuffled order.
@@ -32,7 +33,7 @@ from .shared_data import (
 SCOOP_POSITION_LEVEL_GATES = [
     None,  # Position 0: no level gate (accessible ASAP)
     None,  # Position 1: no level gate
-    7,     # Position 2: Rooftop sphere
+    7,     # Position 2: Warehouse sphere
     10,    # Position 3: Paradise Plaza sphere
     12,    # Position 4: Leisure Park sphere
     15,    # Position 5: Food Court sphere
@@ -96,10 +97,130 @@ SCOOP_SURVIVOR_COUNTS = {
     "The Convicts": (1, 1),                 # Sophie Richard (F)
 }
 
+# How much of the mall has to be open before a kill threshold counts, in the
+# same currency as the level gates below. 25 rather than 26 at the top: 26 is
+# every region, and a region of slack keeps an awkward key placement from
+# making a check unreachable.
+KILL_POINT_GATES = {
+    250: 10, 500: 13, 1000: 17, 2000: 22,
+    5000: 23, 10000: 24, 15000: 25, 20000: 25, 27594: 25,
+}
+
+# The threshold at which an area starts wanting a weapon, and the one at which
+# it also wants the Queen.
+KILL_WEAPON_FROM = 500
+KILL_QUEEN_FROM = 2000
+
+# Car Keys only: the two areas with drivable vehicles want a key for one that
+# is actually parked there once the counts get high. The thresholds differ
+# because the areas do -- Leisure Park tops out at 10000 and the Tunnel at
+# 27594, so the Tunnel can afford to start later.
+#
+# The convicts' Humvee is deliberately not listed even though it sits in
+# Leisure Park: it only exists once the convicts have spawned and been killed,
+# which under ScoopSanity waits on their scoop. Putting it here would let the
+# fill assume a vehicle the player may not be able to reach yet.
+KILL_CAR_FROM = {
+    "Leisure Park": 1000,
+    "Maintenance Tunnel": 2000,
+}
+KILL_CAR_KEYS = {
+    "Leisure Park": ("Sports Car Key", "Motorcycle Key"),
+    "Maintenance Tunnel": ("Sedan Key", "Truck Key"),
+}
+
+# Where each car is parked. A key on its own is not a car -- the player has to
+# reach it -- and under Door Randomizer vehicles cannot be driven between
+# areas, so pairing each key with its home region is correct either way. The
+# convicts' Humvee is absent for the same reason it is absent above: it does
+# not exist until they have been dealt with.
+CAR_HOME = {
+    "Sedan Key": "Maintenance Tunnel",
+    "Truck Key": "Maintenance Tunnel",
+    "Sports Car Key": "Leisure Park",
+    "Motorcycle Key": "Leisure Park",
+}
+
+# Where an SMG can actually be picked up, confirmed in game. Leisure Park has
+# none, so naming the item there on its own would ask for something the area
+# cannot supply -- it has to be carried in from one of these.
+SMG_AREAS = ("Al Fresca Plaza", "Entrance Plaza", "Paradise Plaza",
+             "Food Court", "Maintenance Tunnel")
+
+
+def _smg_from_elsewhere():
+    """SMG plus any one area that stocks one, as separate alternatives.
+
+    Alternatives are ORed and the entries within one are ANDed, so this reads
+    as: have the SMG, and be able to reach somewhere it spawns.
+    """
+    return [["Submachine Gun", "region:" + area] for area in SMG_AREAS]
+
+
+# Restricted Items only: something to kill with. Everywhere else these are on
+# the floor for the taking, so the points above carry those seeds instead.
+#
+# Each area lists alternatives; an alternative is everything that must hold at
+# once. A "loc:" entry is a location to reach, a "region:" entry an area to
+# reach, anything else is an item.
+KILL_WEAPONS = {
+    "Paradise Plaza":        [["Katana"], ["Submachine Gun"],
+                              ["Hunting Knife"], ["Handgun"]],
+    # No Katana in Al Fresca, so the Sledgehammer stands in. It had to join
+    # specialty_items first: those are what get the progression
+    # classification here, and Has() sees nothing else.
+    "Al Fresca Plaza":       [["Sledgehammer"], ["Submachine Gun"],
+                              ["Hunting Knife"], ["Handgun"]],
+    "Entrance Plaza":        [["Submachine Gun"], ["Hunting Knife"], ["Katana"]],
+    "Food Court":            [["Submachine Gun"]],
+    "Wonderland Plaza":      [["Hunting Knife"], ["Handgun"],
+                              ["loc:Kill Adam", "Small Chainsaw"]],
+    "North Plaza":           [["Katana"], ["Hunting Knife"], ["Shotgun"],
+                              ["Handgun"]],
+    # Leisure Park has no SMG of its own, so it needs the item AND somewhere
+    # that stocks one. See SMG_AREAS. The Tunnel has one, so it just needs the
+    # item. From 1000 and 2000 respectively both also want a car key -- that is
+    # KILL_CAR_FROM below, stacked on top of this rather than replacing it.
+    "Leisure Park":          _smg_from_elsewhere(),
+    "Maintenance Tunnel":    [["Submachine Gun"]],
+    "Seon's Food and Stuff": [["Hunting Knife", "Queen"]],
+    "Crislip's Home Saloon": [["Fire Ax", "Queen"],
+                              ["loc:Kill Cliff", "Machete"]],
+    "Colby's Movieland":     [["Baseball Bat", "Queen"]],
+    # Nothing of note is stocked in the Warehouse, so it takes the North
+    # Plaza pair with the Queen on top, as the other small areas do.
+    "Warehouse":             [["Hunting Knife", "Queen"], ["Handgun", "Queen"]],
+}
+
+
+def _kill_weapon_rule(region):
+    """The weapon half of a kill rule, as an Or over the area's alternatives."""
+    alternatives = []
+    for spec in KILL_WEAPONS.get(region, []):
+        parts = []
+        for name in spec:
+            if name.startswith("loc:"):
+                parts.append(CanReachLocation(name[4:]))
+            elif name.startswith("region:"):
+                parts.append(CanReachRegion(name[7:]))
+            else:
+                parts.append(Has(name))
+        alternatives.append(parts[0] if len(parts) == 1 else And(*parts))
+    if not alternatives:
+        return None
+    return alternatives[0] if len(alternatives) == 1 else Or(*alternatives)
+
+
 # Determines the value of the region towards levels
+# The point for the first tier past the Security Room belongs to the Warehouse,
+# not the Rooftop. Both are reached at the same moment, but the Warehouse has
+# zombies to level on and the Rooftop has none -- so logic used to consider
+# levels 7-9 reachable from a roof with nothing to kill. Under Psycho, where
+# the 10,000 PP rooftop photo is gone as well, that left the early spheres
+# short of any PP at all.
 REGION_LEVEL_VALUES = {
     "Security Room": 1,
-    "Rooftop": 1,
+    "Warehouse": 1,
     "Paradise Plaza": 3,
     "Entrance Plaza": 2,
     "Leisure Park": 3,
@@ -241,8 +362,40 @@ MAINTENANCE_TUNNEL_ZONES = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Psycho goal
+# ---------------------------------------------------------------------------
+# Psycho replaces every "Rescue <name>" check with "Kill <name>". The access
+# rule is the same either way -- both need you to reach the survivor -- so the
+# rules below are written once and land on whichever check this seed has.
+#
+# Deliberately conservative: a kill does not need the escort route a rescue
+# needs (Greg's split key, for one), so a few kills are gated later than they
+# strictly must be. That costs placement freedom, never winnability.
+def _survivor_name(world, rescue_name):
+    if getattr(world, "psycho_mode", False):
+        return "Kill " + rescue_name[len("Rescue "):]
+    return rescue_name
+
+
+def _survivor_location(world, rescue_name):
+    return world.multiworld.get_location(_survivor_name(world, rescue_name),
+                                         world.player)
+
+
 def set_rules(world) -> None:
 
+    # Locations this seed never created. Spitter Only drops every check that
+    # needs something in Frank's hands, so their rules have nothing to attach
+    # to -- each site below asks this rather than looking the location up and
+    # failing.
+    _dropped = (world.SPITTER_EXCLUDED_LOCATIONS if world.spitter_only
+                else frozenset())
+
+    # Kent's days come as copies of Progressive Kent Scoop: day N needs N of
+    # them.
+    def _kent_day(day):
+        return Has(PROGRESSIVE_KENT, KENT_DAYS.index(day) + 1)
 
     # --------------------------------------------------------------------
     # Shared gates
@@ -304,6 +457,13 @@ def set_rules(world) -> None:
     # --------------------------------------------------------------------
     # Region access: doors and entrances
     # --------------------------------------------------------------------
+    # The Leisure Park <-> Maintenance Tunnel ramp, named because the Car Keys
+    # rules need the same door: it is the only route a vehicle can take
+    # between those two, so reaching either by another door proves nothing.
+    # Free until the door rules below say otherwise.
+    _ramp_to_tunnel = True_()
+    _ramp_to_park = True_()
+
     if not world.options.door_randomizer:
         # Normal key-based entrance rules. Split Keys gives each door its
         # own key as an alternative to the area key; the two systems use
@@ -329,8 +489,9 @@ def set_rules(world) -> None:
                       _door("North Plaza Key", "Leisure Park - North Plaza Key"))
         world.set_rule(world.multiworld.get_entrance("Maintenance Tunnel -> Meat Processing Area", world.player),
                       _door("Meat Processing Area Key", "Maintenance Tunnel - Meat Processing Area Key"))
+        _ramp_to_tunnel = _door("Maintenance Tunnel Key", "Leisure Park - Maintenance Tunnel Key")
         world.set_rule(world.multiworld.get_entrance("Leisure Park -> Maintenance Tunnel", world.player),
-                      _door("Maintenance Tunnel Key", "Leisure Park - Maintenance Tunnel Key"))
+                      _ramp_to_tunnel)
         world.set_rule(world.multiworld.get_entrance("Leisure Park -> Paradise Plaza", world.player),
                       _door("Paradise Plaza Key", "Leisure Park - Paradise Plaza Key"))
         world.set_rule(world.multiworld.get_entrance("Food Court -> Al Fresca Plaza", world.player),
@@ -370,8 +531,9 @@ def set_rules(world) -> None:
             _greg = And(_greg, Has("Paradise Plaza - Wonderland Plaza Key"))
         world.set_rule(world.multiworld.get_entrance("Paradise Plaza -> Wonderland Plaza", world.player), _greg)
         world.set_rule(world.multiworld.get_entrance("Wonderland Plaza -> Paradise Plaza", world.player), _greg)
+        _ramp_to_park = _door("Leisure Park Key", "Leisure Park - Maintenance Tunnel Key")
         world.set_rule(world.multiworld.get_entrance("Maintenance Tunnel -> Leisure Park", world.player),
-                      _door("Leisure Park Key", "Leisure Park - Maintenance Tunnel Key"))
+                      _ramp_to_park)
 
         # Maintenance Tunnel doors: every mall<->tunnel door needs the
         # Maintenance Tunnel Key plus the Access Key -- either the AP
@@ -444,9 +606,15 @@ def set_rules(world) -> None:
                 world.set_rule(_entrance, _dest_key(_entrance.connected_region.name))
 
         # Greg's passage isn't in the door table, so the shuffle leaves it
-        # where it is and it keeps its scoop gate.
+        # where it is and it keeps its scoop gate -- unless a shuffled door
+        # joins the same two areas. They then share one entrance, and the
+        # door needs only the key: gating it on Kill Adam, who is in
+        # Wonderland, locked a seed whose only way into Wonderland was that
+        # door.
         for _from, _to in (("Paradise Plaza", "Wonderland Plaza"),
                            ("Wonderland Plaza", "Paradise Plaza")):
+            if (_from, _to) in world.door_joined_pairs:
+                continue
             world.set_rule(world.multiworld.get_entrance(f"{_from} -> {_to}", world.player),
                           _dest_key(_to, CanReachLocation("Kill Adam")))
 
@@ -526,43 +694,116 @@ def set_rules(world) -> None:
         world.set_rule(world.multiworld.get_location(f"Reach Level {level}", world.player),
                       RegionPointsAtLeast(25))
 
-    # Exclude Rescues Above code
-    if world.options.exclude_rescues:
-        rescue_threshold = world.options.exclude_rescues_above.value
+    # Zombie kill checks. They sit in their own region, so every one needs its
+    # rule spelled out -- see the note in Locations.py.
+    #
+    # Every one asks for its area, Entrance Plaza's smallest included. Those
+    # two used to be free, on the grounds that the prologue puts the player
+    # there without a key -- but that made them sphere 0, so a new player
+    # cleared them in the opening without ever knowing the checks existed.
+    def _area_kill_rule(_kill_region, _threshold):
+        _parts = [CanReachRegion(_kill_region)]
 
-        # 48 is every survivor in the mall, so it excludes nothing
-        if rescue_threshold < 48:
-            for location in world.multiworld.get_locations(world.player):
-                match = re.fullmatch(r"Rescue (\d+) survivors", location.name)
-                if match and int(match.group(1)) > rescue_threshold:
-                    location.progress_type = LocationProgressType.EXCLUDED
+        # Applies in both item modes: it is about progress through the run,
+        # not about pickups.
+        _points = KILL_POINT_GATES.get(_threshold)
+        if _points:
+            _parts.append(RegionPointsAtLeast(_points))
+
+        # A car for the areas that have one, once the count is past what is
+        # reasonable on foot. Independent of item mode.
+        if world.options.car_keys:
+            _car_from = KILL_CAR_FROM.get(_kill_region)
+            if _car_from is not None and _threshold >= _car_from:
+                _parts.append(Or(*[Has(k)
+                                   for k in KILL_CAR_KEYS[_kill_region]]))
+
+        # Something to kill with, and the Queen on top from 2000.
+        #
+        # Spitter Only skips the weapon half -- the spit is always to hand, so
+        # the threshold rests on how much of the mall is open instead. Grinding
+        # a thousand zombies that way is slow, which suits the mode. The Queen
+        # is still in the pool and still required.
+        if world.options.restricted_item_mode and _threshold >= KILL_WEAPON_FROM:
+            if not world.spitter_only:
+                _weapon = _kill_weapon_rule(_kill_region)
+                if _weapon is not None:
+                    _parts.append(_weapon)
+            if _threshold >= KILL_QUEEN_FROM:
+                _parts.append(Has("Queen"))
+
+        return _parts[0] if len(_parts) == 1 else And(*_parts)
+
+    for _kill_name, _kill_region in ZOMBIE_KILL_REGION_OF.items():
+        try:
+            _kill_loc = world.multiworld.get_location(_kill_name, world.player)
+        except KeyError:
+            continue        # not created at this tier
+        _threshold = int(re.match(r"Kill (\d+) ", _kill_name).group(1))
+        world.set_rule(_kill_loc, _area_kill_rule(_kill_region, _threshold))
+
+    # KillSanity: each kill takes the rule of the area check it is on the
+    # way to, so a band of kills shares one rule object.
+    for _region, _top in getattr(world, "kill_sanity_tops", {}).items():
+        _bands = sorted(ZOMBIE_KILL_TIERS[_region]["genocide"])
+        _band_rules = {}
+        for _n in range(1, _top + 1):
+            _band = next(_b for _b in _bands if _b >= _n)
+            _rule = _band_rules.get(_band)
+            if _rule is None:
+                _rule = _area_kill_rule(_region, _band)
+                _band_rules[_band] = _rule
+            world.set_rule(
+                world.multiworld.get_location(
+                    kill_sanity_location_name(_n, _region), world.player),
+                _rule)
+
+    # Zombie Genocider: the top threshold in every area, which is the same
+    # 53,594 kills as clearing all 99 checks and twelve rules instead of 99.
+    if world.options.goal.value == 3:
+        _tops = [
+            CanReachLocation(f"Kill {max(_tiers['genocide'])} zombies in {_region}")
+            for _region, _tiers in ZOMBIE_KILL_TIERS.items()
+        ]
+        world.set_rule(
+            world.multiworld.get_location(
+                "Zombie Genocider: Kill 53,594 zombies across the mall",
+                world.player),
+            And(*_tops))
+
+    # Exclude Rescues Above code
+    rescue_threshold = world.options.exclude_rescues_above.value
+
+    # 48 is every survivor in the mall, so it excludes nothing -- which is how
+    # the slider turns itself off, and why there is no separate toggle.
+    if rescue_threshold < 48:
+        for location in world.multiworld.get_locations(world.player):
+            match = re.fullmatch(r"Rescue (\d+) survivors", location.name)
+            if match and int(match.group(1)) > rescue_threshold:
+                location.progress_type = LocationProgressType.EXCLUDED
 
     # Exclude Levels Above code
-    if world.options.exclude_levels:
-        threshold = world.options.exclude_levels_above.value
+    threshold = world.options.exclude_levels_above.value
 
-        # Only run if we're not effectively excluding nothing
-        if threshold < 50:
-            for location in world.multiworld.get_locations(world.player):
-                name = location.name
-                match = re.match(r"Reach Level (\d+)", name)
+    # 50 is max level, so it excludes nothing -- the slider's own off switch.
+    if threshold < 50:
+        for location in world.multiworld.get_locations(world.player):
+            name = location.name
+            match = re.match(r"Reach Level (\d+)", name)
 
-                if match:
-                    level_number = int(match.group(1))
-                    if level_number > threshold:
-                        location.progress_type = LocationProgressType.EXCLUDED
+            if match:
+                # re.match ignores the suffix, so this covers the plain
+                # "Reach Level 12" and the "Reach Level 20!" achievement
+                # milestones in one pass.
+                if int(match.group(1)) > threshold:
+                    location.progress_type = LocationProgressType.EXCLUDED
 
-                elif name == "Reach Level 30!":
-                    if 30 > threshold:
-                        location.progress_type = LocationProgressType.EXCLUDED
-
-                elif name == "Reach Level 40!":
-                    if 40 > threshold:
-                        location.progress_type = LocationProgressType.EXCLUDED
-
-                elif name == "Reach max level":
-                    if 50 > threshold:
-                        location.progress_type = LocationProgressType.EXCLUDED
+            elif name == "Reach max level":
+                # Level 50 under a name with no digits in it, so it never
+                # matched the regex. It used to sit inside the branch above
+                # and could not be reached at all, which left it collectable
+                # at every threshold. The outer guard is already threshold<50.
+                location.progress_type = LocationProgressType.EXCLUDED
 
 
     # --------------------------------------------------------------------
@@ -630,6 +871,16 @@ def set_rules(world) -> None:
 
             world.set_rule(world.multiworld.get_location("Complete Bomb Collector", world.player), And(CanReachLocation("Meet back at the Security Room at 11am day 3"), CanReachRegion("Maintenance Tunnel")))
 
+            # The five bombs are collected during the same run through the
+            # tunnel, so they share Bomb Collector's own prerequisite rather
+            # than chaining off it -- gating them behind its completion would
+            # put them a sphere later than they are actually reachable.
+            world.set_rule(world.multiworld.get_location("Bomb Collector - Entrance Plaza Truck", world.player), And(CanReachLocation("Meet back at the Security Room at 11am day 3"), CanReachRegion("Maintenance Tunnel")))
+            world.set_rule(world.multiworld.get_location("Bomb Collector - North Plaza Truck", world.player), And(CanReachLocation("Meet back at the Security Room at 11am day 3"), CanReachRegion("Maintenance Tunnel")))
+            world.set_rule(world.multiworld.get_location("Bomb Collector - Al Fresca Plaza Truck", world.player), And(CanReachLocation("Meet back at the Security Room at 11am day 3"), CanReachRegion("Maintenance Tunnel")))
+            world.set_rule(world.multiworld.get_location("Bomb Collector - Wonderland Plaza Truck", world.player), And(CanReachLocation("Meet back at the Security Room at 11am day 3"), CanReachRegion("Maintenance Tunnel")))
+            world.set_rule(world.multiworld.get_location("Bomb Collector - Seon's Food and Stuff Truck", world.player), And(CanReachLocation("Meet back at the Security Room at 11am day 3"), CanReachRegion("Maintenance Tunnel")))
+
             world.set_rule(world.multiworld.get_location("Beat Drivin Carlito", world.player), And(CanReachLocation("Complete Bomb Collector"), CanReachRegion("Maintenance Tunnel")))
 
             world.set_rule(world.multiworld.get_location("Meet back at the Security Room at 5pm day 3", world.player), Or(CanReachLocation("Complete Bomb Collector"), CanReachLocation("Beat Drivin Carlito")))
@@ -642,7 +893,7 @@ def set_rules(world) -> None:
         if world.options.scoop_sanity:
             world.multiworld.get_location("Beat Drivin Carlito", world.player).progress_type = LocationProgressType.EXCLUDED
 
-            world.multiworld.get_location("Rescue Greg Simpson", world.player).progress_type = LocationProgressType.EXCLUDED
+            _survivor_location(world, "Rescue Greg Simpson").progress_type = LocationProgressType.EXCLUDED
 
         world.set_rule(world.multiworld.get_location("Complete Jessie's Discovery", world.player), CanReachLocation("Escort Isabela to Carlito's Hideout and have a chat"))
 
@@ -670,44 +921,48 @@ def set_rules(world) -> None:
 
         world.set_rule(world.multiworld.get_location("Get bit!", world.player), CanReachLocation("Ending A: Solve all of the cases and be on the helipad at 12pm"))
 
-        # The mod holds each ingredient until its item arrives, so finding
-        # one only needs Overtime and the room it sits in.
-        world.set_rule(world.multiworld.get_location("Find the Blender", world.player), And(CanReachLocation("Get bit!"), CanReachRegion("Food Court")))
-        world.set_rule(world.multiworld.get_location("Find the First Aid Kit", world.player), And(CanReachLocation("Get bit!"), CanReachRegion("Seon's Food and Stuff")))
-        world.set_rule(world.multiworld.get_location("Find the Coffee Filters", world.player), And(CanReachLocation("Get bit!"), CanReachRegion("Security Room")))
-        world.set_rule(world.multiworld.get_location("Find the Magnifying Glass", world.player), And(CanReachLocation("Get bit!"), CanReachRegion("Wonderland Plaza")))
-        world.set_rule(world.multiworld.get_location("Find the Camp Stove", world.player), And(CanReachLocation("Get bit!"), CanReachRegion("Entrance Plaza")))
-        world.set_rule(world.multiworld.get_location("Find the Developing Solution", world.player), And(CanReachLocation("Get bit!"), CanReachRegion("Paradise Plaza")))
-        world.set_rule(world.multiworld.get_location("Find the Perfume Bottle", world.player), And(CanReachLocation("Get bit!"), CanReachRegion("Entrance Plaza")))
-        world.set_rule(world.multiworld.get_location("Find the Cold Spray", world.player), And(CanReachLocation("Get bit!"), CanReachRegion("Paradise Plaza")))
+        # Where each ingredient actually is. The items were removed, so this is
+        # what ties a hand-in to having been somewhere to pick it up -- Has()
+        # used to do that job.
+        _where = {
+            "Blender": Or(CanReachRegion("Food Court"),
+                          CanReachRegion("Al Fresca Plaza"),
+                          CanReachRegion("Paradise Plaza")),
+            "First Aid Kit": CanReachRegion("Seon's Food and Stuff"),
+            "Coffee Filters": CanReachRegion("Security Room"),
+            "Magnifying Glass": CanReachRegion("Wonderland Plaza"),
+            "Camp Stove": CanReachRegion("Entrance Plaza"),
+            "Perfume Bottle": CanReachRegion("Entrance Plaza"),
+            "Developing Solution": CanReachRegion("Paradise Plaza"),
+            "Cold Spray": CanReachRegion("Paradise Plaza"),
+        }
+        for _name, _where_rule in _where.items():
+            world.set_rule(
+                world.multiworld.get_location(f"Find the {_name}", world.player),
+                And(CanReachLocation("Get bit!"), _where_rule))
+            world.set_rule(
+                world.multiworld.get_location(f"Give Isabela the {_name}",
+                                              world.player),
+                And(CanReachLocation("Get bit!"),
+                    CanReachRegion("Carlito's Hideout"), _where_rule))
 
-        # Completing the mission needs all eight. Isabela accepts them one at
-        # a time, so each hand-in is its own check above; this is the mission.
-        if _gating:
-            _suppressants = And(Has("Blender"), Has("First Aid Kit"),
-                                Has("Coffee Filters"), Has("Magnifying Glass"),
-                                Has("Camp Stove"), Has("Developing Solution"),
-                                Has("Perfume Bottle"), Has("Cold Spray"))
-        else:
-            _suppressants = True_()
-        world.set_rule(world.multiworld.get_location("Scramble for a Suppressant", world.player), And(CanReachLocation("Get bit!"), _suppressants))
+
+        # The mission needs all eight ingredients, and each is reachable
+        # exactly when its own hand-in is.
+        world.set_rule(world.multiworld.get_location("Scramble for a Suppressant", world.player),
+                       And(*[CanReachLocation(f"Give Isabela the {_n}")
+                             for _n in _where]))
 
         world.set_rule(world.multiworld.get_location("See the crashed helicopter", world.player), And(CanReachRegion("Leisure Park"), CanReachLocation("Get bit!")))
-        world.set_rule(world.multiworld.get_location("Hella Copter - Shoot down the Special Forces Helicopter", world.player), CanReachLocation("See the crashed helicopter"))
+        # Not in a Spitter Only seed -- spit cannot shoot a helicopter down.
+        if not world.spitter_only:
+            world.set_rule(world.multiworld.get_location("Hella Copter - Shoot down the Special Forces Helicopter", world.player), CanReachLocation("See the crashed helicopter"))
 
         world.set_rule(world.multiworld.get_location("Frank sees a sick-ass RC Drone", world.player), CanReachLocation("Get bit!"))
 
         # She accepts them one at a time, so each hand-in is its own check
         # -- gated on the item, because the mod holds the pickup until then.
-        world.set_rule(world.multiworld.get_location("Give Isabela the Blender", world.player), And(Has("Blender") if _gating else True_(), CanReachRegion("Carlito's Hideout"), CanReachLocation("Get bit!")))
-        world.set_rule(world.multiworld.get_location("Give Isabela the First Aid Kit", world.player), And(Has("First Aid Kit") if _gating else True_(), CanReachRegion("Carlito's Hideout"), CanReachLocation("Get bit!")))
-        world.set_rule(world.multiworld.get_location("Give Isabela the Coffee Filters", world.player), And(Has("Coffee Filters") if _gating else True_(), CanReachRegion("Carlito's Hideout"), CanReachLocation("Get bit!")))
-        world.set_rule(world.multiworld.get_location("Give Isabela the Magnifying Glass", world.player), And(Has("Magnifying Glass") if _gating else True_(), CanReachRegion("Carlito's Hideout"), CanReachLocation("Get bit!")))
-        world.set_rule(world.multiworld.get_location("Give Isabela the Camp Stove", world.player), And(Has("Camp Stove") if _gating else True_(), CanReachRegion("Carlito's Hideout"), CanReachLocation("Get bit!")))
-        world.set_rule(world.multiworld.get_location("Give Isabela the Developing Solution", world.player), And(Has("Developing Solution") if _gating else True_(), CanReachRegion("Carlito's Hideout"), CanReachLocation("Get bit!")))
-        world.set_rule(world.multiworld.get_location("Give Isabela the Perfume Bottle", world.player), And(Has("Perfume Bottle") if _gating else True_(), CanReachRegion("Carlito's Hideout"), CanReachLocation("Get bit!")))
-        world.set_rule(world.multiworld.get_location("Give Isabela the Cold Spray", world.player), And(Has("Cold Spray") if _gating else True_(), CanReachRegion("Carlito's Hideout"), CanReachLocation("Get bit!")))
-        world.set_rule(world.multiworld.get_location("Give Isabela the Generator", world.player), And(CanReachLocation("Scramble for a Suppressant"), CanReachRegion("Carlito's Hideout")))
+        world.set_rule(world.multiworld.get_location("Give Isabela the Generator", world.player), And(CanReachLocation("Scramble for a Suppressant"), CanReachRegion("Carlito's Hideout"), CanReachLocation("See the crashed helicopter")))
 
         # Queens are handed over after the serum is made.
         _needs_queen = (world.options.restricted_item_mode
@@ -720,20 +975,21 @@ def set_rules(world) -> None:
 
         world.set_rule(world.multiworld.get_location("Proceed through the cave with Isabela", world.player), CanReachLocation("Honey Hunt"))
 
-        # Isabela refuses to leave without the key, so the Cave is behind it
+        # Isabela refuses to leave without the key, so the tunnel is behind it
         # however the player got to her.
         if _gating:
-            for _entrance in ("Carlito's Hideout -> Cave", "Leisure Park -> Cave"):
+            for _entrance in ("Carlito's Hideout -> Clock Tower Tunnel",
+                              "Leisure Park -> Clock Tower Tunnel"):
                 world.set_rule(world.multiworld.get_entrance(_entrance, world.player),
-                              Has("Cave Key"))
+                              Has("Clock Tower Tunnel Key"))
 
-        # The Cave in the order it is walked: Isabela crawls through the first
+        # The tunnel in the order it is walked: Isabela crawls through the first
         # gate, opens the second, then the lever raises the last one.
         world.set_rule(world.multiworld.get_location("Open Gate 1", world.player), CanReachLocation("Proceed through the cave with Isabela"))
         world.set_rule(world.multiworld.get_location("Open Gate 2", world.player), CanReachLocation("Open Gate 1"))
         world.set_rule(world.multiworld.get_location("Raise the final gate", world.player), CanReachLocation("Open Gate 2"))
 
-        world.set_rule(world.multiworld.get_location("Get to the Humvee", world.player), And(Has("Humvee Key") if _gating else True_(), CanReachLocation("Raise the final gate"), CanReachRegion("Cave")))
+        world.set_rule(world.multiworld.get_location("Get to the Humvee", world.player), And(Has("Humvee Key") if _gating else True_(), CanReachLocation("Raise the final gate"), CanReachRegion("Clock Tower Tunnel")))
 
         world.set_rule(world.multiworld.get_location("Fight a tank and win", world.player), CanReachLocation("Get to the Humvee"))
 
@@ -741,7 +997,6 @@ def set_rules(world) -> None:
 
         world.set_rule(world.multiworld.get_location("Kill 10 Special Forces", world.player), And(CanReachRegion("Paradise Plaza"), Has("DAY3_11_AM"), CanReachLocation("Get bit!"), CanReachLocation("Ending A: Solve all of the cases and be on the helipad at 12pm")))
 
-        world.set_rule(world.multiworld.get_location("Kill 100 zombies with an RPG", world.player), And(CanReachRegion("Maintenance Tunnel"), CanReachLocation("Get bit!")))
 
     # ScoopSanity: gate every event of every scoop uniformly on item
     # received, previous scoop's completion, scoop regions, and the
@@ -796,76 +1051,80 @@ def set_rules(world) -> None:
     # Survivors
     # --------------------------------------------------------------------
     # Survivors in Rooftop
-    world.set_rule(world.multiworld.get_location("Rescue Jeff Meyer", world.player), CanReachRegion("Rooftop"))
-    world.set_rule(world.multiworld.get_location("Rescue Natalie Meyer", world.player), CanReachRegion("Rooftop"))
+    world.set_rule(_survivor_location(world, "Rescue Jeff Meyer"), CanReachRegion("Rooftop"))
+    world.set_rule(_survivor_location(world, "Rescue Natalie Meyer"), CanReachRegion("Rooftop"))
 
     # Survivors in Paradise Plaza
-    world.set_rule(world.multiworld.get_location("Rescue Heather Tompkins", world.player), And(CanReachRegion("Paradise Plaza"), (Has("Twin Sisters") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation("Rescue Ross Folk"), CanReachLocation("Rescue Tonya Waters")))))
-    world.set_rule(world.multiworld.get_location("Rescue Pamela Tompkins", world.player), And(CanReachRegion("Paradise Plaza"), (Has("Twin Sisters") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation("Rescue Ross Folk"), CanReachLocation("Rescue Tonya Waters")))))
-    world.set_rule(world.multiworld.get_location("Rescue Ronald Shiner", world.player), And(CanReachRegion("Paradise Plaza"), (Has("Orange Juice") if world.options.restricted_item_mode else True_()), (Has("Restaurant Man") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
-    world.set_rule(world.multiworld.get_location("Rescue Jennifer Gorman", world.player), And(CanReachRegion("Paradise Plaza"), (Has("The Cult") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
-    world.set_rule(world.multiworld.get_location("Rescue Tad Hawthorne", world.player), And(CanReachRegion("Paradise Plaza"), CanReachLocation("Kill Kent on day 3"), (And(Has("Cut from the Same Cloth"), Has("Photo Challenge"), Has("Photographer's Pride")) if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM")))))
-    world.set_rule(world.multiworld.get_location("Rescue Simone Ravendark", world.player), And(CanReachRegion("Paradise Plaza"), (Has("A Woman in Despair") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM"), CanReachLocation("Complete Santa Cabeza")))))
+    world.set_rule(_survivor_location(world, "Rescue Heather Tompkins"), And(CanReachRegion("Paradise Plaza"), (Has("Twin Sisters") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation(_survivor_name(world, "Rescue Ross Folk")), CanReachLocation(_survivor_name(world, "Rescue Tonya Waters"))))))
+    world.set_rule(_survivor_location(world, "Rescue Pamela Tompkins"), And(CanReachRegion("Paradise Plaza"), (Has("Twin Sisters") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation(_survivor_name(world, "Rescue Ross Folk")), CanReachLocation(_survivor_name(world, "Rescue Tonya Waters"))))))
+    world.set_rule(_survivor_location(world, "Rescue Ronald Shiner"), And(CanReachRegion("Paradise Plaza"), (Has("Orange Juice") if world.options.restricted_item_mode else True_()), (Has("Restaurant Man") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
+    world.set_rule(_survivor_location(world, "Rescue Jennifer Gorman"), And(CanReachRegion("Paradise Plaza"), (Has("The Cult") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
+    world.set_rule(_survivor_location(world, "Rescue Tad Hawthorne"), And(CanReachRegion("Paradise Plaza"), CanReachLocation("Kill Kent on day 3"), (_kent_day("Photographer's Pride") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM")))))
+    world.set_rule(_survivor_location(world, "Rescue Simone Ravendark"), And(CanReachRegion("Paradise Plaza"), (Has("A Woman in Despair") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM"), CanReachLocation("Complete Santa Cabeza")))))
     ## 1.1.0 HAS A BUG WITH "Rescue Simone Ravendark", THIS NEXT LINE EXCLUDES THIS CHECK IN ALL PLAY MODES AND SHOULD BE REMOVED UPON FIX BEING IMPLEMENTED
-    world.multiworld.get_location("Rescue Simone Ravendark", world.player).progress_type = LocationProgressType.EXCLUDED
+    _survivor_location(world, "Rescue Simone Ravendark").progress_type = LocationProgressType.EXCLUDED
 
     # Survivors in Leisure Park
-    world.set_rule(world.multiworld.get_location("Rescue Sophie Richard", world.player), And(CanReachRegion("Leisure Park"), (Has("The Convicts") if world.options.scoop_sanity else True_())))
+    world.set_rule(_survivor_location(world, "Rescue Sophie Richard"), And(CanReachRegion("Leisure Park"), (Has("The Convicts") if world.options.scoop_sanity else True_())))
 
     # Survivors in Food Court
-    world.set_rule(world.multiworld.get_location("Rescue Gil Jiminez", world.player), And(CanReachRegion("Food Court"), (Has("The Drunkard") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM")))))
+    world.set_rule(_survivor_location(world, "Rescue Gil Jiminez"), And(CanReachRegion("Food Court"), (Has("The Drunkard") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM")))))
 
     # Survivors in Al Fresca Plaza
-    world.set_rule(world.multiworld.get_location("Rescue Aaron Swoop", world.player), And(CanReachRegion("Al Fresca Plaza"), (Has("Barricade Pair") if world.options.scoop_sanity else True_())))
-    world.set_rule(world.multiworld.get_location("Rescue Burt Thompson", world.player), And(CanReachRegion("Al Fresca Plaza"), (Has("Barricade Pair") if world.options.scoop_sanity else True_())))
-    world.set_rule(world.multiworld.get_location("Rescue Leah Stein", world.player), And(CanReachRegion("Al Fresca Plaza"), (Has("A Mother's Lament") if world.options.scoop_sanity else True_())))
-    world.set_rule(world.multiworld.get_location("Rescue Gordon Stalworth", world.player), And(CanReachRegion("Al Fresca Plaza"), (Has("The Coward") if world.options.scoop_sanity else Has("DAY2_06_AM"))))
+    world.set_rule(_survivor_location(world, "Rescue Aaron Swoop"), And(CanReachRegion("Al Fresca Plaza"), (Has("Barricade Pair") if world.options.scoop_sanity else True_())))
+    world.set_rule(_survivor_location(world, "Rescue Burt Thompson"), And(CanReachRegion("Al Fresca Plaza"), (Has("Barricade Pair") if world.options.scoop_sanity else True_())))
+    world.set_rule(_survivor_location(world, "Rescue Leah Stein"), And(CanReachRegion("Al Fresca Plaza"), (Has("A Mother's Lament") if world.options.scoop_sanity else True_())))
+    world.set_rule(_survivor_location(world, "Rescue Gordon Stalworth"), And(CanReachRegion("Al Fresca Plaza"), (Has("The Coward") if world.options.scoop_sanity else Has("DAY2_06_AM"))))
 
     # Survivors in Entrance Plaza
-    world.set_rule(world.multiworld.get_location("Rescue Bill Brenton", world.player), ep_shutter)
-    world.set_rule(world.multiworld.get_location("Rescue Wayne Blackwell", world.player), And(ep_shutter, (Has("Mark of the Sniper") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation("Meet the Hall Family")))))
-    world.set_rule(world.multiworld.get_location("Rescue Jolie Wu", world.player), And(ep_shutter, (Has("The Woman Who Didn't Make it") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
-    world.set_rule(world.multiworld.get_location("Rescue Rachel Decker", world.player), And(ep_shutter, (Has("The Woman Who Didn't Make it") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
-    world.set_rule(world.multiworld.get_location("Rescue Floyd Sanders", world.player), And(ep_shutter, (Has("Antique Lover") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
+    world.set_rule(_survivor_location(world, "Rescue Bill Brenton"), ep_shutter)
+    world.set_rule(_survivor_location(world, "Rescue Wayne Blackwell"), And(ep_shutter, (Has("Mark of the Sniper") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation("Meet the Hall Family")))))
+    world.set_rule(_survivor_location(world, "Rescue Jolie Wu"), And(ep_shutter, (Has("The Woman Who Didn't Make it") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
+    world.set_rule(_survivor_location(world, "Rescue Rachel Decker"), And(ep_shutter, (Has("The Woman Who Didn't Make it") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
+    world.set_rule(_survivor_location(world, "Rescue Floyd Sanders"), And(ep_shutter, (Has("Antique Lover") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
 
     # Survivors in Wonderland Plaza
-    world.set_rule(world.multiworld.get_location("Rescue Greg Simpson", world.player), And(CanReachRegion("Wonderland Plaza"), CanReachRegion("Paradise Plaza"), (Has("Out of Control") if world.options.scoop_sanity else True_()), (Has("Paradise Plaza - Wonderland Plaza Key") if world.options.split_keys else True_()))) # Greg Simpson is the only Wonderland Plaza Survivor with additional Logic due to him unlocking the shortcut
-    world.set_rule(world.multiworld.get_location("Rescue Yuu Tanaka", world.player), And(CanReachRegion("Wonderland Plaza"), (Has("Book [Japanese Conversation]") if world.options.restricted_item_mode else True_()), (Has("Japanese Tourists") if world.options.scoop_sanity else True_())))
-    world.set_rule(world.multiworld.get_location("Rescue Shinji Kitano", world.player), And(CanReachRegion("Wonderland Plaza"), (Has("Book [Japanese Conversation]") if world.options.restricted_item_mode else True_()), (Has("Japanese Tourists") if world.options.scoop_sanity else True_())))
-    world.set_rule(world.multiworld.get_location("Rescue Tonya Waters", world.player), And(CanReachRegion("Wonderland Plaza"), (Has("Lovers") if world.options.scoop_sanity else Has("DAY2_06_AM"))))
-    world.set_rule(world.multiworld.get_location("Rescue Ross Folk", world.player), And(CanReachRegion("Wonderland Plaza"), (Has("Lovers") if world.options.scoop_sanity else Has("DAY2_06_AM"))))
-    world.set_rule(world.multiworld.get_location("Rescue Kay Nelson", world.player), And(CanReachRegion("Wonderland Plaza"), (Has("Above the Law") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation("Kill Jo")))))
-    world.set_rule(world.multiworld.get_location("Rescue Lilly Deacon", world.player), And(CanReachRegion("Wonderland Plaza"), (Has("Above the Law") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation("Kill Jo")))))
-    world.set_rule(world.multiworld.get_location("Rescue Kelly Carpenter", world.player), And(CanReachRegion("Wonderland Plaza"), (Has("Above the Law") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation("Kill Jo")))))
-    world.set_rule(world.multiworld.get_location("Rescue Janet Star", world.player), And(CanReachRegion("Wonderland Plaza"), (Has("Above the Law") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation("Kill Jo")))))
-    world.set_rule(world.multiworld.get_location("Rescue Sally Mills", world.player), And(CanReachRegion("Wonderland Plaza"), (Has("Hanging by a Thread") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
-    world.set_rule(world.multiworld.get_location("Rescue Nick Evans", world.player), And(CanReachRegion("Wonderland Plaza"), (Has("Hanging by a Thread") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
-    world.set_rule(world.multiworld.get_location("Rescue Mindy Baker", world.player), And(CanReachRegion("Wonderland Plaza"), (Has("Long Haired Punk") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), CanReachLocation("Defeat Paul")))))
-    world.set_rule(world.multiworld.get_location("Rescue Debbie Willet", world.player), And(CanReachRegion("Wonderland Plaza"), (Has("Long Haired Punk") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), CanReachLocation("Defeat Paul")))))
-    world.set_rule(world.multiworld.get_location("Rescue Paul Carson", world.player), And(CanReachRegion("Wonderland Plaza"), (Has("Fire Extinguisher") if world.options.restricted_item_mode else True_()), (Has("Long Haired Punk") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), CanReachLocation("Defeat Paul")))))
-    world.set_rule(world.multiworld.get_location("Rescue Leroy McKenna", world.player), And(CanReachRegion("Wonderland Plaza"), (Has("A Sick Man") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM")))))
-    world.set_rule(world.multiworld.get_location("Rescue Susan Walsh", world.player), And(CanReachRegion("Wonderland Plaza"), (Has("The Woman Left Behind") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM")))))
+    # Greg is the one Wonderland survivor with extra logic: he opens the
+    # passage. Under Split Keys the door has its own key, and without it he
+    # will not join -- reaching both areas by another route is not enough.
+    world.set_rule(_survivor_location(world, "Rescue Greg Simpson"), And(CanReachRegion("Wonderland Plaza"), CanReachRegion("Paradise Plaza"), (Has("Out of Control") if world.options.scoop_sanity else True_()), (Has("Paradise Plaza - Wonderland Plaza Key") if world.options.split_keys else True_())))
+    world.set_rule(_survivor_location(world, "Rescue Yuu Tanaka"), And(CanReachRegion("Wonderland Plaza"), (Has("Book [Japanese Conversation]") if world.options.restricted_item_mode else True_()), (Has("Japanese Tourists") if world.options.scoop_sanity else True_())))
+    world.set_rule(_survivor_location(world, "Rescue Shinji Kitano"), And(CanReachRegion("Wonderland Plaza"), (Has("Book [Japanese Conversation]") if world.options.restricted_item_mode else True_()), (Has("Japanese Tourists") if world.options.scoop_sanity else True_())))
+    world.set_rule(_survivor_location(world, "Rescue Tonya Waters"), And(CanReachRegion("Wonderland Plaza"), (Has("Lovers") if world.options.scoop_sanity else Has("DAY2_06_AM"))))
+    world.set_rule(_survivor_location(world, "Rescue Ross Folk"), And(CanReachRegion("Wonderland Plaza"), (Has("Lovers") if world.options.scoop_sanity else Has("DAY2_06_AM"))))
+    world.set_rule(_survivor_location(world, "Rescue Kay Nelson"), And(CanReachRegion("Wonderland Plaza"), (Has("Above the Law") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation("Kill Jo")))))
+    world.set_rule(_survivor_location(world, "Rescue Lilly Deacon"), And(CanReachRegion("Wonderland Plaza"), (Has("Above the Law") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation("Kill Jo")))))
+    world.set_rule(_survivor_location(world, "Rescue Kelly Carpenter"), And(CanReachRegion("Wonderland Plaza"), (Has("Above the Law") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation("Kill Jo")))))
+    world.set_rule(_survivor_location(world, "Rescue Janet Star"), And(CanReachRegion("Wonderland Plaza"), (Has("Above the Law") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), CanReachLocation("Kill Jo")))))
+    world.set_rule(_survivor_location(world, "Rescue Sally Mills"), And(CanReachRegion("Wonderland Plaza"), (Has("Hanging by a Thread") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
+    world.set_rule(_survivor_location(world, "Rescue Nick Evans"), And(CanReachRegion("Wonderland Plaza"), (Has("Hanging by a Thread") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
+    world.set_rule(_survivor_location(world, "Rescue Mindy Baker"), And(CanReachRegion("Wonderland Plaza"), (Has("Long Haired Punk") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), CanReachLocation("Defeat Paul")))))
+    world.set_rule(_survivor_location(world, "Rescue Debbie Willet"), And(CanReachRegion("Wonderland Plaza"), (Has("Long Haired Punk") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), CanReachLocation("Defeat Paul")))))
+    if _survivor_name(world, "Rescue Paul Carson") not in _dropped:
+        world.set_rule(_survivor_location(world, "Rescue Paul Carson"), And(CanReachRegion("Wonderland Plaza"), (Has("Fire Extinguisher") if world.options.restricted_item_mode and not world.spitter_only else True_()), (Has("Long Haired Punk") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), CanReachLocation("Defeat Paul")))))
+    world.set_rule(_survivor_location(world, "Rescue Leroy McKenna"), And(CanReachRegion("Wonderland Plaza"), (Has("A Sick Man") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM")))))
+    world.set_rule(_survivor_location(world, "Rescue Susan Walsh"), And(CanReachRegion("Wonderland Plaza"), (Has("The Woman Left Behind") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM")))))
 
     # Survivors in North Plaza
-    world.set_rule(world.multiworld.get_location("Rescue David Bailey", world.player), And(CanReachRegion("North Plaza"), (Has("Shadow of the North Plaza") if world.options.scoop_sanity else True_())))
-    world.set_rule(world.multiworld.get_location("Rescue Kindell Johnson", world.player), And(CanReachRegion("North Plaza"), (Has("Dressed for Action") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM")))))
-    world.set_rule(world.multiworld.get_location("Rescue Brett Styles", world.player), And(CanReachRegion("North Plaza"), (Has("Gun Shop Standoff") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM")))))
-    world.set_rule(world.multiworld.get_location("Rescue Jonathan Picardson", world.player), And(CanReachRegion("North Plaza"), (Has("Gun Shop Standoff") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM")))))
-    world.set_rule(world.multiworld.get_location("Rescue Alyssa Laurent", world.player), And(CanReachRegion("North Plaza"), (Has("Gun Shop Standoff") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM")))))
+    world.set_rule(_survivor_location(world, "Rescue David Bailey"), And(CanReachRegion("North Plaza"), (Has("Shadow of the North Plaza") if world.options.scoop_sanity else True_())))
+    world.set_rule(_survivor_location(world, "Rescue Kindell Johnson"), And(CanReachRegion("North Plaza"), (Has("Dressed for Action") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM")))))
+    world.set_rule(_survivor_location(world, "Rescue Brett Styles"), And(CanReachRegion("North Plaza"), (Has("Gun Shop Standoff") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM")))))
+    world.set_rule(_survivor_location(world, "Rescue Jonathan Picardson"), And(CanReachRegion("North Plaza"), (Has("Gun Shop Standoff") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM")))))
+    world.set_rule(_survivor_location(world, "Rescue Alyssa Laurent"), And(CanReachRegion("North Plaza"), (Has("Gun Shop Standoff") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM")))))
 
     # Survivors locked behind Hatchet Man (requires both North Plaza and Crislip's Home Saloon)
-    world.set_rule(world.multiworld.get_location("Rescue Josh Manning", world.player), And(CanReachRegion("North Plaza"), CanReachRegion("Crislip's Home Saloon"), (Has("The Hatchet Man") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), CanReachLocation("Kill Cliff")))))
-    world.set_rule(world.multiworld.get_location("Rescue Barbara Patterson", world.player), And(CanReachRegion("North Plaza"), CanReachRegion("Crislip's Home Saloon"), (Has("The Hatchet Man") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), CanReachLocation("Kill Cliff")))))
-    world.set_rule(world.multiworld.get_location("Rescue Rich Atkins", world.player), And(CanReachRegion("North Plaza"), CanReachRegion("Crislip's Home Saloon"), (Has("The Hatchet Man") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), CanReachLocation("Kill Cliff")))))
+    world.set_rule(_survivor_location(world, "Rescue Josh Manning"), And(CanReachRegion("North Plaza"), CanReachRegion("Crislip's Home Saloon"), (Has("The Hatchet Man") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), CanReachLocation("Kill Cliff")))))
+    world.set_rule(_survivor_location(world, "Rescue Barbara Patterson"), And(CanReachRegion("North Plaza"), CanReachRegion("Crislip's Home Saloon"), (Has("The Hatchet Man") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), CanReachLocation("Kill Cliff")))))
+    world.set_rule(_survivor_location(world, "Rescue Rich Atkins"), And(CanReachRegion("North Plaza"), CanReachRegion("Crislip's Home Saloon"), (Has("The Hatchet Man") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), CanReachLocation("Kill Cliff")))))
 
     # Survivors in Colby's Movieland
-    world.set_rule(world.multiworld.get_location("Rescue Beth Shrake", world.player), And(CanReachRegion("Colby's Movieland"), (Has("A Strange Group") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), CanReachLocation("Kill Sean")))))
-    world.set_rule(world.multiworld.get_location("Rescue Michelle Feltz", world.player), And(CanReachRegion("Colby's Movieland"), (Has("A Strange Group") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), CanReachLocation("Kill Sean")))))
-    world.set_rule(world.multiworld.get_location("Rescue Nathan Crabbe", world.player), And(CanReachRegion("Colby's Movieland"), (Has("A Strange Group") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), CanReachLocation("Kill Sean")))))
-    world.set_rule(world.multiworld.get_location("Rescue Ray Mathison", world.player), And(CanReachRegion("Colby's Movieland"), (Has("A Strange Group") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), CanReachLocation("Kill Sean")))))
-    world.set_rule(world.multiworld.get_location("Rescue Cheryl Jones", world.player), And(CanReachRegion("Colby's Movieland"), (Has("A Strange Group") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), CanReachLocation("Kill Sean")))))
+    world.set_rule(_survivor_location(world, "Rescue Beth Shrake"), And(CanReachRegion("Colby's Movieland"), (Has("A Strange Group") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), CanReachLocation("Kill Sean")))))
+    world.set_rule(_survivor_location(world, "Rescue Michelle Feltz"), And(CanReachRegion("Colby's Movieland"), (Has("A Strange Group") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), CanReachLocation("Kill Sean")))))
+    world.set_rule(_survivor_location(world, "Rescue Nathan Crabbe"), And(CanReachRegion("Colby's Movieland"), (Has("A Strange Group") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), CanReachLocation("Kill Sean")))))
+    world.set_rule(_survivor_location(world, "Rescue Ray Mathison"), And(CanReachRegion("Colby's Movieland"), (Has("A Strange Group") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), CanReachLocation("Kill Sean")))))
+    world.set_rule(_survivor_location(world, "Rescue Cheryl Jones"), And(CanReachRegion("Colby's Movieland"), (Has("A Strange Group") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), CanReachLocation("Kill Sean")))))
 
-    # These five survivor-count milestones are gated behind nearly every
+    # These survivor-count milestones are gated behind nearly every
     # late-game scoop, so they only become reachable once most of the
     # progression chain is already solved -- a poor place for progression
     # or useful items, since they'd effectively be locked behind the rest
@@ -875,6 +1134,10 @@ def set_rules(world) -> None:
         "Encounter 10 survivors",
         "Encounter 50 survivors",
     ):
+        # "Get 50 survivors to join" does not exist under Psycho -- nobody
+        # joins a psychopath -- so ask rather than assume.
+        if _name in world.PSYCHO_EXCLUDED_LOCATIONS and world.psycho_mode:
+            continue
         world.multiworld.get_location(_name, world.player).progress_type = LocationProgressType.EXCLUDED
 
     world.set_rule(world.multiworld.get_location("Kill 1000 zombies", world.player), CanReachRegion("Maintenance Tunnel"))
@@ -913,11 +1176,34 @@ def set_rules(world) -> None:
     world.set_rule(world.multiworld.get_location("Meet Paul", world.player), And(CanReachRegion("Wonderland Plaza"), (Has("Long Haired Punk") if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM")))))
     world.set_rule(world.multiworld.get_location("Defeat Paul", world.player), CanReachLocation("Meet Paul"))
 
-    world.set_rule(world.multiworld.get_location("Meet Kent on day 1", world.player), And(CanReachRegion("Paradise Plaza"), (Has("Cut from the Same Cloth") if world.options.scoop_sanity else True_())))
+    # Kent's days arrive in order under ScoopSanity, as copies of Progressive
+    # Kent Scoop, so each day's locations need that many copies and Paradise
+    # Plaza. Without ScoopSanity the vanilla schedule applies, so the days stay
+    # chained on each other and on their time keys.
+    world.set_rule(world.multiworld.get_location("Meet Kent on day 1", world.player), And(CanReachRegion("Paradise Plaza"), (_kent_day("Cut from the Same Cloth") if world.options.scoop_sanity else True_())))
     world.set_rule(world.multiworld.get_location("Complete Kent's day 1 photoshoot", world.player), CanReachLocation("Meet Kent on day 1"))
-    world.set_rule(world.multiworld.get_location("Meet Kent on day 2", world.player), And(CanReachLocation("Complete Kent's day 1 photoshoot"), (Or(Has("Novelty Mask (Bear)"), Has("Novelty Mask (Servbot)"), Has("Novelty Mask (Horse)")) if world.options.restricted_item_mode else True_()), (And(Has("Cut from the Same Cloth"), Has("Photo Challenge")) if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
+    # Day 2's shoot wants an OUTTAKE photo worth 500 PP, taken before Frank
+    # talks to Kent. A novelty mask on a zombie is the usual way, but Spitter
+    # Only cannot put one on. Three scoops
+    # hand the player a shot instead: Ronald right after meeting him, Gil right
+    # after meeting him, and Paul once he is beaten. Ronald and Gil turn
+    # hostile in Psycho. Without ScoopSanity the shoot is at noon on day 2,
+    # and Gil and Paul only appear on day 3, so only Ronald is in time.
+    _outtake = [] if world.spitter_only else [
+        Has("Novelty Mask (Bear)"), Has("Novelty Mask (Servbot)"), Has("Novelty Mask (Horse)"),
+        And(Has("Novelty Mask (Ghoul)"), CanReachRegion("Entrance Plaza")),
+    ]
+    if not world.psycho_mode:
+        _outtake.append(And(CanReachRegion("Paradise Plaza"),
+                            Has("Restaurant Man") if world.options.scoop_sanity
+                            else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"))))
+    if world.options.scoop_sanity:
+        _outtake.append(CanReachLocation("Defeat Paul"))
+        if not world.psycho_mode:
+            _outtake.append(And(CanReachRegion("Food Court"), Has("The Drunkard")))
+    world.set_rule(world.multiworld.get_location("Meet Kent on day 2", world.player), And(CanReachRegion("Paradise Plaza"), (Or(*_outtake) if world.options.restricted_item_mode else True_()), (_kent_day("Photo Challenge") if world.options.scoop_sanity else And(CanReachLocation("Complete Kent's day 1 photoshoot"), Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
     world.set_rule(world.multiworld.get_location("Complete Kent's day 2 photoshoot", world.player), CanReachLocation("Meet Kent on day 2"))
-    world.set_rule(world.multiworld.get_location("Meet Kent on day 3", world.player), And(CanReachLocation("Complete Kent's day 2 photoshoot"), (And(Has("Cut from the Same Cloth"), Has("Photo Challenge"), Has("Photographer's Pride")) if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM")))))
+    world.set_rule(world.multiworld.get_location("Meet Kent on day 3", world.player), And(CanReachRegion("Paradise Plaza"), (_kent_day("Photographer's Pride") if world.options.scoop_sanity else And(CanReachLocation("Complete Kent's day 2 photoshoot"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM")))))
     world.set_rule(world.multiworld.get_location("Kill Kent on day 3", world.player), CanReachLocation("Meet Kent on day 3"))
 
     # Psychopath encounter / photograph / kill lists.
@@ -954,14 +1240,107 @@ def set_rules(world) -> None:
                   AtLeast(8, *[CanReachLocation(p) for p, c in photograph_psychos for _ in range(c)]))
     world.set_rule(world.multiworld.get_location("Kill 8 psychopaths", world.player),
                   AtLeast(8, *[CanReachLocation(p) for p, c in kill_psychos for _ in range(c)]))
-    world.set_rule(world.multiworld.get_location("Hit 10 zombies with a parasol", world.player), (And(Or(CanReachRegion("Entrance Plaza"), CanReachRegion("Al Fresca Plaza"), CanReachRegion("Crislip's Home Saloon")), Has("Parasol")) if world.options.restricted_item_mode else Or(CanReachRegion("Entrance Plaza"), CanReachRegion("Al Fresca Plaza"), CanReachRegion("Crislip's Home Saloon"), And(Has("Parasol"), CanReachRegion("Paradise Plaza")))))
+    # Kill 100 zombies with an RPG. The blender turns a Mega Buster and a Fire
+    # Extinguisher into one long before Overtime, which is why this is a
+    # Challenge rather than an Overtime check -- every goal can reach it.
+    #
+    # Obtaining an ingredient differs by mode: without Restricted you can pick
+    # one off the floor, so being sent it OR being able to walk to it is
+    # enough. Restricted can only use what it was sent, and still has to go
+    # and collect it, so it needs both.
+    _restricted = bool(world.options.restricted_item_mode)
+
+    # Every area a fire extinguisher is confirmed to stay in. NOT the
+    # Warehouse: the one Frank drops in the Jessie cutscene despawns early in
+    # the run, so a rule leaning on it promises something that is not there.
+    FIRE_EXTINGUISHER_AREAS = ("Al Fresca Plaza", "Food Court",
+                               "Crislip's Home Saloon",
+                               "Seon's Food and Stuff", "Wonderland Plaza")
+
+    def _obtainable(item_name, *regions):
+        if len(regions) > 1:
+            somewhere = Or(*[CanReachRegion(r) for r in regions])
+        else:
+            somewhere = CanReachRegion(regions[0])
+        if _restricted:
+            return And(Has(item_name), somewhere)
+        return Or(Has(item_name), somewhere)
+
+    _rpg_blend = [
+        _obtainable("Mega Buster", "Colby's Movieland"),
+        _obtainable("Fire Extinguisher", *FIRE_EXTINGUISHER_AREAS),
+        Has("Book [Blender]"),
+    ]
+    # Restricted cannot pick the blender's output up either.
+    if _restricted:
+        _rpg_blend.append(Has("Rocket Launcher"))
+    _rpg_rule = And(*_rpg_blend)
+
+    if world.options.goal.value == 0:
+        # Overtime is the other way to find one -- Ending S only, and naming
+        # "Get bit!" on any other goal would not resolve.
+        _rpg_ot = [CanReachLocation("Get bit!")]
+        if _restricted:
+            _rpg_ot.append(Has("Rocket Launcher"))
+        _rpg_rule = Or(_rpg_rule, And(*_rpg_ot))
+
+    if "Kill 100 zombies with an RPG" not in _dropped:
+        world.set_rule(world.multiworld.get_location("Kill 100 zombies with an RPG", world.player), _rpg_rule)
+
+    if "Hit 10 zombies with a parasol" not in _dropped:
+        world.set_rule(world.multiworld.get_location("Hit 10 zombies with a parasol", world.player), (And(Or(CanReachRegion("Entrance Plaza"), CanReachRegion("Al Fresca Plaza"), CanReachRegion("Crislip's Home Saloon")), Has("Parasol")) if world.options.restricted_item_mode else Or(CanReachRegion("Entrance Plaza"), CanReachRegion("Al Fresca Plaza"), CanReachRegion("Crislip's Home Saloon"), And(Has("Parasol"), CanReachRegion("Paradise Plaza")))))
     world.set_rule(world.multiworld.get_location("Kill 50 cultists", world.player), And(CanReachRegion("Paradise Plaza"), CanReachLocation("Witness Sean in Paradise Plaza")))
     world.set_rule(world.multiworld.get_location("Photograph 30 survivors", world.player), And(CanReachRegion("Leisure Park"), CanReachRegion("Al Fresca Plaza"), CanReachRegion("Wonderland Plaza"), CanReachRegion("North Plaza"), CanReachRegion("Entrance Plaza"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM")))
-    world.set_rule(world.multiworld.get_location("Escort 8 survivors at once", world.player), And(CanReachRegion("Paradise Plaza"), CanReachRegion("Al Fresca Plaza"), CanReachLocation("Kill Jo"), CanReachRegion("Food Court"), CanReachRegion("Entrance Plaza"), (AtLeast(8, *[Has(s) for s, c in SCOOP_SURVIVOR_COUNTS.items() for _ in range(c[0])]) if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
-    world.set_rule(world.multiworld.get_location("Frank the pimp", world.player), And(CanReachRegion("Paradise Plaza"), CanReachRegion("Al Fresca Plaza"), CanReachLocation("Kill Jo"), CanReachRegion("Food Court"), CanReachRegion("Entrance Plaza"), (AtLeast(8, *[Has(s) for s, c in SCOOP_SURVIVOR_COUNTS.items() for _ in range(c[1])]) if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
-    world.set_rule(world.multiworld.get_location("Jump a vehicle 50 feet", world.player), CanReachRegion("Leisure Park"))
-    world.set_rule(world.multiworld.get_location("Bowl over 5 zombies", world.player), (And(Or(CanReachRegion("Paradise Plaza"), CanReachRegion("Wonderland Plaza")), Has("Bowling Ball")) if world.options.restricted_item_mode else Or(CanReachRegion("Paradise Plaza"), CanReachRegion("Wonderland Plaza"), And(Has("Bowling Ball"), Or(CanReachRegion("Paradise Plaza"), CanReachRegion("Entrance Plaza"))))))
-    world.set_rule(world.multiworld.get_location("Hit a golf ball 100 feet", world.player), (And(Or(CanReachRegion("Paradise Plaza"), CanReachRegion("Entrance Plaza")), Has("Golf Club")) if world.options.restricted_item_mode else Or(CanReachRegion("Paradise Plaza"), CanReachRegion("Entrance Plaza"), And(Has("Golf Club"), CanReachRegion("Rooftop")))))
+    # Needs survivors alive and willing to follow, which Psycho does
+    # not allow. create_region drops these, so do not rule them either.
+    if not world.psycho_mode:
+        world.set_rule(world.multiworld.get_location("Escort 8 survivors at once", world.player), And(CanReachRegion("Paradise Plaza"), CanReachRegion("Al Fresca Plaza"), CanReachLocation("Kill Jo"), CanReachRegion("Food Court"), CanReachRegion("Entrance Plaza"), (AtLeast(8, *[Has(s) for s, c in SCOOP_SURVIVOR_COUNTS.items() for _ in range(c[0])]) if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
+        world.set_rule(world.multiworld.get_location("Frank the pimp", world.player), And(CanReachRegion("Paradise Plaza"), CanReachRegion("Al Fresca Plaza"), CanReachLocation("Kill Jo"), CanReachRegion("Food Court"), CanReachRegion("Entrance Plaza"), (AtLeast(8, *[Has(s) for s, c in SCOOP_SURVIVOR_COUNTS.items() for _ in range(c[1])]) if world.options.scoop_sanity else And(Has("DAY2_06_AM"), Has("DAY2_11_AM")))))
+    # Car Keys moves the vehicle challenges behind the key for a vehicle that
+    # is actually in the region. Leisure Park parks the sports car and a
+    # motorcycle; the Maintenance Tunnels have the sedan and the box truck.
+    if world.options.car_keys:
+        # Door Randomizer stops vehicles being driven between areas, so a car
+        # is only usable where it is parked. Without it they can be driven
+        # anywhere, and only collecting them is region-bound.
+        _cars_travel = not world.options.door_randomizer
+
+        # A car crossing between the two areas has to take the ramp, so the
+        # ramp's own door is required on top of reaching the far side. Region
+        # access alone is not enough: Leisure Park also opens from North Plaza
+        # and Paradise, and neither of those is drivable.
+        def _drive_from(key_name):
+            home = CAR_HOME[key_name]
+            if home == "Maintenance Tunnel":
+                return And(Has(key_name), CanReachRegion(home), _ramp_to_park)
+            return And(Has(key_name), CanReachRegion(home), _ramp_to_tunnel)
+
+        # The ramp is in Leisure Park and only these two can take it.
+        _jump_alts = [And(Has("Sports Car Key"), CanReachRegion("Leisure Park"))]
+        if _cars_travel:
+            # The sedan lives in the Tunnel, so this route means fetching it
+            # and driving it over the ramp.
+            _jump_alts.append(_drive_from("Sedan Key"))
+        _jump_rule = Or(*_jump_alts) if len(_jump_alts) > 1 else _jump_alts[0]
+
+        # Counts this high are only practical in the Tunnel, so it stays
+        # required either way. What can satisfy it is what differs: any car
+        # when they can be driven over, only a Tunnel one when they cannot.
+        if _cars_travel:
+            _usable = [And(Has(_k), CanReachRegion(_r))
+                       if _r == "Maintenance Tunnel" else _drive_from(_k)
+                       for _k, _r in CAR_HOME.items()]
+            _kill_rule = And(CanReachRegion("Maintenance Tunnel"), Or(*_usable))
+        else:
+            _kill_rule = And(CanReachRegion("Maintenance Tunnel"),
+                             Or(Has("Sedan Key"), Has("Truck Key")))
+    else:
+        _jump_rule = CanReachRegion("Leisure Park")
+        _kill_rule = CanReachRegion("Maintenance Tunnel")
+    world.set_rule(world.multiworld.get_location("Jump a vehicle 50 feet", world.player), _jump_rule)
+    if "Bowl over 5 zombies" not in _dropped:
+        world.set_rule(world.multiworld.get_location("Bowl over 5 zombies", world.player), (And(Or(CanReachRegion("Paradise Plaza"), CanReachRegion("Wonderland Plaza")), Has("Bowling Ball")) if world.options.restricted_item_mode else Or(CanReachRegion("Paradise Plaza"), CanReachRegion("Wonderland Plaza"), And(Has("Bowling Ball"), Or(CanReachRegion("Paradise Plaza"), CanReachRegion("Entrance Plaza"))))))
+        world.set_rule(world.multiworld.get_location("Hit a golf ball 100 feet", world.player), (And(Or(CanReachRegion("Paradise Plaza"), CanReachRegion("Entrance Plaza")), Has("Golf Club")) if world.options.restricted_item_mode else Or(CanReachRegion("Paradise Plaza"), CanReachRegion("Entrance Plaza"), And(Has("Golf Club"), CanReachRegion("Rooftop")))))
 
     # --------------------------------------------------------------------
     # --------------------------------------------------------------------
@@ -971,31 +1350,58 @@ def set_rules(world) -> None:
     world.set_rule(world.multiworld.get_location("Reach Level 30!", world.player), CanReachLocation("Reach Level 30"))
     world.set_rule(world.multiworld.get_location("Reach Level 40!", world.player), CanReachLocation("Reach Level 40"))
     world.set_rule(world.multiworld.get_location("Reach max level", world.player), CanReachLocation("Reach Level 50"))
-    world.set_rule(world.multiworld.get_location("Kill 500 zombies by vehicle", world.player), CanReachRegion("Maintenance Tunnel"))
-    world.set_rule(world.multiworld.get_location("Kill 1000 zombies by vehicle", world.player), CanReachRegion("Maintenance Tunnel"))
-    all_side_scoops = SURVIVOR_SCOOP_NAMES + PSYCHOPATH_SCOOP_NAMES
-    world.set_rule(world.multiworld.get_location("Get 50 survivors to join", world.player), And(CanReachRegion("Paradise Plaza"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM"), CanReachLocation("Kill Kent on day 3"), CanReachLocation("Kill Cliff"), CanReachLocation("Kill Jo"), CanReachLocation("Kill Adam"), CanReachLocation("Kill Sean"), CanReachLocation("Kill Roger and Jack (and Thomas if you want) and chat with Wayne"), CanReachLocation("Defeat Paul"), (And(HasAll(*all_side_scoops), ending_a_rule) if world.options.scoop_sanity else True_())))
+    world.set_rule(world.multiworld.get_location("Kill 500 zombies by vehicle", world.player), _kill_rule)
+    world.set_rule(world.multiworld.get_location("Kill 1000 zombies by vehicle", world.player), _kill_rule)
+    # Kent's days are Progressive Kent Scoop copies, one per day.
+    all_side_scoops = [_s for _s in SURVIVOR_SCOOP_NAMES + PSYCHOPATH_SCOOP_NAMES
+                       if _s not in KENT_DAYS]
+    all_side_scoops_rule = And(HasAll(*all_side_scoops), Has(PROGRESSIVE_KENT, len(KENT_DAYS)))
+    # Needs survivors alive and willing to follow, which Psycho does
+    # not allow. create_region drops these, so do not rule them either.
+    if not world.psycho_mode:
+        world.set_rule(world.multiworld.get_location("Get 50 survivors to join", world.player), And(CanReachRegion("Paradise Plaza"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM"), CanReachLocation("Kill Kent on day 3"), CanReachLocation("Kill Cliff"), CanReachLocation("Kill Jo"), CanReachLocation("Kill Adam"), CanReachLocation("Kill Sean"), CanReachLocation("Kill Roger and Jack (and Thomas if you want) and chat with Wayne"), CanReachLocation("Defeat Paul"), (And(all_side_scoops_rule, ending_a_rule) if world.options.scoop_sanity else True_())))
     world.set_rule(world.multiworld.get_location("Encounter 10 survivors", world.player), And(CanReachRegion("Paradise Plaza"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM"), CanReachLocation("Kill Kent on day 3"), CanReachLocation("Kill Cliff"), CanReachLocation("Kill Jo"), CanReachLocation("Kill Adam"), CanReachLocation("Kill Sean"), CanReachLocation("Kill Roger and Jack (and Thomas if you want) and chat with Wayne"), CanReachLocation("Defeat Paul")))
-    world.set_rule(world.multiworld.get_location("Encounter 50 survivors", world.player), And(CanReachRegion("Paradise Plaza"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM"), CanReachLocation("Kill Kent on day 3"), CanReachLocation("Kill Cliff"), CanReachLocation("Kill Jo"), CanReachLocation("Kill Adam"), CanReachLocation("Kill Sean"), CanReachLocation("Kill Roger and Jack (and Thomas if you want) and chat with Wayne"), CanReachLocation("Defeat Paul"), (And(HasAll(*all_side_scoops), ending_a_rule) if world.options.scoop_sanity else True_())))
-    _rescue_locs = [CanReachLocation(_l) for _l in world.ALL_RESCUE_LOCATIONS]
-    world.set_rule(world.multiworld.get_location("Rescue 5 survivors", world.player), AtLeast(5, *_rescue_locs))
-    world.set_rule(world.multiworld.get_location("Rescue 10 survivors", world.player), AtLeast(10, *_rescue_locs))
-    world.set_rule(world.multiworld.get_location("Rescue 15 survivors", world.player), AtLeast(15, *_rescue_locs))
-    world.set_rule(world.multiworld.get_location("Rescue 20 survivors", world.player), AtLeast(20, *_rescue_locs))
-    world.set_rule(world.multiworld.get_location("Rescue 25 survivors", world.player), AtLeast(25, *_rescue_locs))
-    world.set_rule(world.multiworld.get_location("Rescue 30 survivors", world.player), AtLeast(30, *_rescue_locs))
-    world.set_rule(world.multiworld.get_location("Rescue 35 survivors", world.player), AtLeast(35, *_rescue_locs))
-    world.set_rule(world.multiworld.get_location("Rescue 40 survivors", world.player), AtLeast(40, *_rescue_locs))
-    world.set_rule(world.multiworld.get_location("Rescue 45 survivors", world.player), AtLeast(45, *_rescue_locs))
-    world.set_rule(world.multiworld.get_location("Rescue 48 survivors", world.player), AtLeast(48, *_rescue_locs))
+    world.set_rule(world.multiworld.get_location("Encounter 50 survivors", world.player), And(CanReachRegion("Paradise Plaza"), Has("DAY2_06_AM"), Has("DAY2_11_AM"), Has("DAY3_00_AM"), Has("DAY3_11_AM"), CanReachLocation("Kill Kent on day 3"), CanReachLocation("Kill Cliff"), CanReachLocation("Kill Jo"), CanReachLocation("Kill Adam"), CanReachLocation("Kill Sean"), CanReachLocation("Kill Roger and Jack (and Thomas if you want) and chat with Wayne"), CanReachLocation("Defeat Paul"), (And(all_side_scoops_rule, ending_a_rule) if world.options.scoop_sanity else True_())))
+    # The rescue ladder, or the kill ladder in its place. Only one of the two
+    # sets of locations exists in a seed, and both count to the same numbers.
+    if world.psycho_mode:
+        _kill_locs = [CanReachLocation(_l) for _l in world.ALL_KILL_LOCATIONS
+                      if _l not in _dropped]
+        for _n in SURVIVOR_MILESTONES:
+            world.set_rule(
+                world.multiworld.get_location("Kill {} survivors".format(_n),
+                                              world.player),
+                AtLeast(_n, *_kill_locs))
+    else:
+        # Paul is not rescuable in Spitter Only, so he cannot count toward
+        # a milestone either.
+        _rescue_locs = [CanReachLocation(_l) for _l in world.ALL_RESCUE_LOCATIONS
+                        if _l not in _dropped]
+        for _n in SURVIVOR_MILESTONES:
+            if "Rescue {} survivors".format(_n) in _dropped:
+                continue
+            world.set_rule(
+                world.multiworld.get_location("Rescue {} survivors".format(_n),
+                                              world.player),
+                AtLeast(_n, *_rescue_locs))
 
     # Challenge locations default to sphere 0 via the blanket rule above.
     # Falling far enough is awkward to arrange at the start, so this one is
     # pushed behind the Warehouse instead of being an early-game filler
     # slot nobody can identify (#14).
     world.set_rule(world.multiworld.get_location("Fall from a high height", world.player), CanReachRegion("Warehouse"))
-    world.set_rule(world.multiworld.get_location("Fire 30 bullets", world.player), Or(CanReachLocation("Fire 300 bullets"), And(Has("Handgun"), Or(CanReachRegion("North Plaza"), CanReachRegion("Wonderland Plaza"), CanReachRegion("Paradise Plaza"), CanReachRegion("Al Fresca Plaza"))) if world.options.restricted_item_mode else Or(CanReachRegion("North Plaza"), CanReachRegion("Wonderland Plaza"), CanReachRegion("Paradise Plaza"), CanReachRegion("Al Fresca Plaza"))))
-    world.set_rule(world.multiworld.get_location("Fire 300 bullets", world.player), (And(CanReachRegion("North Plaza"), Or(*[Has(g) for g in (("Handgun", "Shotgun", "Sniper Rifle") if world.options.door_randomizer else ("Handgun", "Submachine Gun", "Shotgun", "Sniper Rifle"))])) if world.options.restricted_item_mode else Or(CanReachRegion("North Plaza"), And(Or(*[Has(g) for g in ("Handgun", "Submachine Gun", "Shotgun", "Sniper Rifle", "Heavy Machinegun", "Machinegun")]), CanReachRegion("Rooftop")))))
+    # Ten zombies in novelty masks. The Ghoul mask is stocked in Entrance
+    # Plaza, the other three in Paradise Plaza; either plaza has the zombies.
+    if "Costume Party - Put novelty masks on 10 zombies" not in _dropped:
+        world.set_rule(world.multiworld.get_location("Costume Party - Put novelty masks on 10 zombies", world.player),
+                       (Or(And(CanReachRegion("Entrance Plaza"), Has("Novelty Mask (Ghoul)")),
+                           And(CanReachRegion("Paradise Plaza"),
+                               Or(Has("Novelty Mask (Bear)"), Has("Novelty Mask (Servbot)"), Has("Novelty Mask (Horse)"))))
+                        if world.options.restricted_item_mode
+                        else Or(CanReachRegion("Entrance Plaza"), CanReachRegion("Paradise Plaza"))))
+    if "Fire 30 bullets" not in _dropped:
+        world.set_rule(world.multiworld.get_location("Fire 30 bullets", world.player), Or(CanReachLocation("Fire 300 bullets"), And(Has("Handgun"), Or(CanReachRegion("North Plaza"), CanReachRegion("Wonderland Plaza"), CanReachRegion("Paradise Plaza"), CanReachRegion("Al Fresca Plaza"))) if world.options.restricted_item_mode else Or(CanReachRegion("North Plaza"), CanReachRegion("Wonderland Plaza"), CanReachRegion("Paradise Plaza"), CanReachRegion("Al Fresca Plaza"))))
+        world.set_rule(world.multiworld.get_location("Fire 300 bullets", world.player), (And(CanReachRegion("North Plaza"), Or(*[Has(g) for g in (("Handgun", "Shotgun", "Sniper Rifle") if world.options.door_randomizer else ("Handgun", "Submachine Gun", "Shotgun", "Sniper Rifle"))])) if world.options.restricted_item_mode else Or(CanReachRegion("North Plaza"), And(Or(*[Has(g) for g in ("Handgun", "Submachine Gun", "Shotgun", "Sniper Rifle", "Heavy Machinegun", "Machinegun")]), CanReachRegion("Rooftop")))))
     # "Ride zombies for 50 feet" requires Zombie Ride only when that
     # skill is actually in the AP item pool. BuildItemPool adds skills
     # only when enable_skill_items is on AND vanilla_progression is
@@ -1012,6 +1418,108 @@ def set_rules(world) -> None:
                   _ride_rule)
     world.set_rule(world.multiworld.get_location("Change into 46 new outfits", world.player), And(CanReachRegion("Leisure Park"), CanReachRegion("Al Fresca Plaza"), CanReachRegion("Wonderland Plaza"), CanReachRegion("North Plaza"), CanReachRegion("Entrance Plaza"), CanReachRegion("Food Court"), CanReachRegion("Paradise Plaza"), CanReachRegion("Seon's Food and Stuff"), CanReachRegion("Crislip's Home Saloon"), CanReachRegion("Colby's Movieland")))
     world.set_rule(world.multiworld.get_location("Change into 5 new outfits", world.player), Or(CanReachRegion("Paradise Plaza"), CanReachRegion("Entrance Plaza"), CanReachRegion("Wonderland Plaza")))
+
+    # --------------------------------------------------------------------
+    # --------------------------------------------------------------------
+    # Special Forces in the mall
+    # --------------------------------------------------------------------
+    # The two Special Forces checks are normally Overtime-only. When
+    # special_forces_mode puts the soldiers in the mall during the 72 hours
+    # they are reached there instead, so these rules REPLACE the Overtime ones
+    # set above (same location, different way in -- the check itself is the
+    # same accomplishment either way).
+    #
+    # Set after the Ending S block deliberately: set_rule overwrites, so with
+    # the mode on the mall rule wins, and with it off the Overtime rule stands.
+    if world.options.special_forces_mode.value and world.options.scoop_sanity:
+        _sf_item_mode = world.options.special_forces_mode.value == 1
+
+        # The helicopter is over Leisure Park and has to be SHOT down, so
+        # reaching the park is not enough on its own -- under door
+        # randomization the first door can open onto Leisure Park with no gun
+        # anywhere behind the player.
+        #
+        # Any of three guns will do it (the Handgun turns out to be plenty),
+        # and each is found in its own set of regions:
+        _PISTOL_REGIONS = ("Paradise Plaza", "Al Fresca Plaza",
+                           "Wonderland Plaza", "North Plaza")
+        _SNIPER_REGIONS = ("North Plaza",)
+        _SMG_REGIONS = ("Al Fresca Plaza", "Entrance Plaza",
+                        "Paradise Plaza", "Food Court")
+
+        if world.options.restricted_item_mode:
+            # Restricted: a gun only exists once its item has arrived, and it
+            # still has to be picked up where it spawns -- so both halves are
+            # required, per gun.
+            _armed = Or(
+                And(Has("Handgun"),
+                    Or(*[CanReachRegion(r) for r in _PISTOL_REGIONS])),
+                And(Has("Sniper Rifle"),
+                    Or(*[CanReachRegion(r) for r in _SNIPER_REGIONS])),
+                And(Has("Submachine Gun"),
+                    Or(*[CanReachRegion(r) for r in _SMG_REGIONS])),
+            )
+        else:
+            # Otherwise guns lie around the mall, so reaching any region that
+            # has one is enough -- or simply being sent one as an item.
+            _gun_regions = sorted(set(_PISTOL_REGIONS + _SNIPER_REGIONS
+                                      + _SMG_REGIONS))
+            _armed = Or(
+                Or(*[CanReachRegion(r) for r in _gun_regions]),
+                Or(*[Has(g) for g in
+                     ("Handgun", "Sniper Rifle", "Submachine Gun")]),
+            )
+
+        # Ten soldiers is a fight, not a stroll: out in the mall and armed the
+        # same way as for the helicopter. Paradise or Entrance Plaza, since the
+        # Security Room's own doorway can open Entrance Plaza before Paradise.
+        # The item alone put it in logic while the player was still in the
+        # Security Room (tester report, 2026-10-05). In item mode the scoop has
+        # to have brought them; in permanent they are there from Jessie on.
+        # Spitter Only has no guns in the pool -- the spit is the weapon there,
+        # so being out in the mall is enough.
+        _kill_reqs = [Or(CanReachRegion("Paradise Plaza"), CanReachRegion("Entrance Plaza"))]
+        if not world.spitter_only:
+            _kill_reqs.append(_armed)
+        if _sf_item_mode:
+            _kill_reqs.append(Has("Special Forces"))
+        world.set_rule(
+            world.multiworld.get_location("Kill 10 Special Forces", world.player),
+            And(*_kill_reqs))
+
+        # Spitter Only has no helicopter check at all: the location is
+        # dropped in create_region, and the runtime completes the Special
+        # Forces scoop on the ten kills alone.
+        if not world.spitter_only:
+            _heli_reqs = [CanReachRegion("Leisure Park"), _armed]
+            if _sf_item_mode:
+                _heli_reqs.append(Has("Special Forces"))
+            world.set_rule(
+                world.multiworld.get_location(
+                    "Hella Copter - Shoot down the Special Forces Helicopter",
+                    world.player),
+                And(*_heli_reqs))
+
+    # Overtime checks as filler
+    # --------------------------------------------------------------------
+    # Keyed off the category rather than the names: Overtime picks up checks
+    # over time and a name list would quietly fall behind.
+    #
+    # Items are deliberately untouched. The Clock Tower Tunnel Key and Humvee
+    # Key stay progression -- the ask was to stop needing what is IN Overtime,
+    # not to stop needing a key to get through it.
+    if world.options.overtime_checks_filler:
+        _overtime_names = {
+            _d.name
+            for _table in location_tables.values()
+            for _d in _table
+            if _d.category == DRLocationCategory.OVERTIME_SCOOP
+            or (_d.category == DRLocationCategory.SPECIAL_FORCES_SCOOP
+                and not world.options.special_forces_mode.value)
+        }
+        for location in world.multiworld.get_locations(world.player):
+            if location.name in _overtime_names:
+                location.progress_type = LocationProgressType.EXCLUDED
 
     # --------------------------------------------------------------------
     # PP Stickers
@@ -1213,7 +1721,8 @@ def set_rules(world) -> None:
     ]:
         world.set_rule(world.multiworld.get_location(_name, world.player),
                       AtLeast(_n, *_sticker_children))
-    world.set_rule(world.multiworld.get_location("Get 10000 PP in one photo", world.player), CanReachRegion("Rooftop"))
+    if not world.psycho_mode:  # dropped from Psycho seeds in create_region
+        world.set_rule(world.multiworld.get_location("Get 10000 PP in one photo", world.player), CanReachRegion("Rooftop"))
 
     world.set_rule(world.multiworld.get_location("Find Greg's secret passage", world.player), CanReachLocation("Kill Adam"))
     # Endings
@@ -1230,142 +1739,71 @@ def set_rules(world) -> None:
     # --------------------------------------------------------------------
     # PP bonus events
     # --------------------------------------------------------------------
-    # PP-bonus rules (per-count for "counted" entries). Per-location rule
-    # combines: required_regions (ALL reachable; first may be bypassed by
-    # alt_item), requires_location (extra location gate, e.g. First Aid
-    # Kit needs Steven), restricted_mode_items_any (in restricted
-    # mode, requires ANY one of the listed items), and ep_shutter (the
-    # entry sits behind Entrance Plaza's storefront shutters).
+    # Extra PP for using things around the mall. Most need only the region
+    # they sit in, which the default rule already gives, so only the ones
+    # asking for more are here -- treadmills, dishes and sandbags have no
+    # rule on purpose. set_rule REPLACES that default, so each line below
+    # names its own region.
     if world.options.pp_bonus_locations:
         restricted_mode_on = bool(world.options.restricted_item_mode.value)
 
-        def _make_rule(required_regions, alt_item, req_loc, items_any,
-                       restricted_on=restricted_mode_on):
-            parts = []
-            # Region gating: ALL required regions must be reachable,
-            # except the first can be bypassed by alt_item.
-            if required_regions:
-                first = CanReachRegion(required_regions[0])
-                if alt_item:
-                    first = Or(first, Has(alt_item))
-                parts.append(first)
-                parts.extend(CanReachRegion(r) for r in required_regions[1:])
-            if req_loc:
-                parts.append(CanReachLocation(req_loc))
-            if restricted_on and items_any:
-                parts.append(Or(*[Has(it) for it in items_any]))
-            return And(*parts) if parts else True_()
+        # A player sent the Access Key opens that door without going down.
+        world.set_rule(world.multiworld.get_location("Obtain Maintenance Tunnel Key", world.player), Or(CanReachRegion("Maintenance Tunnel"), Has("Maintenance Tunnel Access Key")))
 
-        # Entries flagged ep_shutter sit inside Entrance Plaza's
-        # storefronts, so reaching EP is not enough -- the shutter
-        # cutscene has to have played.
-        def _gate_on_shutter(inner):
-            return And(ep_shutter, inner)
+        # Behind the Seon's register scoop, so it is not created on a seed
+        # where main scoops are not checks.
+        try:
+            _first_aid = world.multiworld.get_location("Obtain First Aid Kit", world.player)
+        except KeyError:
+            _first_aid = None
+        if _first_aid is not None:
+            world.set_rule(_first_aid, And(CanReachRegion("Seon's Food and Stuff"), CanReachLocation("Clean up... Register 6!")))
 
-        for _entry in AP_TRIGGER_LOCATIONS:
-            _names = expand_trigger_location_names(_entry)
-            if not _names:
-                continue
-            _shuttered = bool(_entry.get("ep_shutter"))
-            _alt_item = _entry.get("alt_item")
-            _req_loc = _entry.get("requires_location")
-            _items_any = _entry.get("restricted_mode_items_any") or []
-            _t = _entry.get("type")
-            _max = int(_entry.get("max_count", 0))
+        # A microwave needs food. Seon's is where it comes from; being sent it
+        # is just as good, except in restricted mode which needs both.
+        if restricted_mode_on:
+            microwave_food = And(CanReachRegion("Seon's Food and Stuff"),
+                                 Or(Has("Uncooked Pizza"), Has("Raw Meat")))
+        else:
+            microwave_food = Or(CanReachRegion("Seon's Food and Stuff"),
+                                Has("Uncooked Pizza"), Has("Raw Meat"))
 
-            # A required-predecessor location may not exist this seed
-            # (e.g. Savior+ScoopSanity disables MAIN_SCOOP). Drop the gate
-            # gracefully when missing; region gating still applies.
-            if _req_loc:
-                try:
-                    world.multiworld.get_location(_req_loc, world.player)
-                except KeyError:
-                    _req_loc = None
+        world.set_rule(world.multiworld.get_location("Use the Microwave in Jill's Sandwiches", world.player), And(CanReachRegion("Paradise Plaza"), microwave_food))
+        world.set_rule(world.multiworld.get_location("Use the Microwave in Chris's Fine Foods", world.player), And(CanReachRegion("Food Court"), microwave_food))
+        world.set_rule(world.multiworld.get_location("Use the Microwave in That's a Spicy Meatball!", world.player), And(CanReachRegion("Food Court"), microwave_food))
+        world.set_rule(world.multiworld.get_location("Use the Microwave in Central Tacos", world.player), And(CanReachRegion("Food Court"), microwave_food))
+        world.set_rule(world.multiworld.get_location("Use the Microwave in Meaty's Burgers", world.player), And(CanReachRegion("Food Court"), microwave_food))
+        world.set_rule(world.multiworld.get_location("Use the Microwave in Jade Paradise", world.player), And(CanReachRegion("Food Court"), microwave_food))
+        world.set_rule(world.multiworld.get_location("Use the Microwave in Teresa's Oven", world.player), And(CanReachRegion("Food Court"), microwave_food))
+        world.set_rule(world.multiworld.get_location("Use the Microwave in Colombian Roastmasters - Al Fresca Plaza", world.player), And(CanReachRegion("Al Fresca Plaza"), microwave_food))
+        world.set_rule(world.multiworld.get_location("Use the Microwave in Hamburger Fiefdom", world.player), And(CanReachRegion("Al Fresca Plaza"), microwave_food))
 
-            # Zone-counted entries (region_counts): "Use n X" is
-            # reachable when the reachable zones' item counts sum to n.
-            # required_regions (e.g. Seon's as the microwave food
-            # source) are always needed, unless one of alt_items_any
-            # has been received in their place (e.g. Raw Meat /
-            # Uncooked Pizza stand in for the grocery store). These
-            # locations live in Security Room so the parent region
-            # never blocks a zone alternative -- the rule does all the
-            # gating.
-            _region_counts = _entry.get("region_counts")
-            if _t == "counted" and _region_counts:
-                _required = list(_entry.get("required_regions") or [])
-                _required_alts = _entry.get("alt_items_any") or []
+        # Outside restricted mode a pan is always to hand. Spitter Only has
+        # no pan at all, and drops the stove checks instead.
+        if restricted_mode_on and not world.spitter_only:
+            world.set_rule(world.multiworld.get_location("Heat a pan on the Stove in Colombian Roastmasters - Paradise Plaza", world.player), And(CanReachRegion("Paradise Plaza"), Has("Frying Pan")))
+            world.set_rule(world.multiworld.get_location("Heat a pan on the Stove in Jill's Sandwiches", world.player), And(CanReachRegion("Paradise Plaza"), Has("Frying Pan")))
+            world.set_rule(world.multiworld.get_location("Heat a pan on the Stove in Chris's Fine Foods", world.player), And(CanReachRegion("Food Court"), Has("Frying Pan")))
+            world.set_rule(world.multiworld.get_location("Heat a pan on the Stove in That's a Spicy Meatball!", world.player), And(CanReachRegion("Food Court"), Has("Frying Pan")))
+            world.set_rule(world.multiworld.get_location("Heat a pan on the Stove in Colombian Roastmasters - Al Fresca Plaza", world.player), And(CanReachRegion("Al Fresca Plaza"), Has("Frying Pan")))
 
-                def _make_count_rule(n, counts=_region_counts,
-                                     required=_required,
-                                     alts=_required_alts,
-                                     req_loc=_req_loc,
-                                     items_any=_items_any,
-                                     restricted_on=restricted_mode_on):
-                    parts = []
-                    if required:
-                        req = And(*[CanReachRegion(r) for r in required])
-                        # Outside restricted mode an alt item substitutes
-                        # for the required regions entirely.
-                        if not restricted_on and alts:
-                            req = Or(req, *[Has(it) for it in alts])
-                        parts.append(req)
-                    if req_loc:
-                        parts.append(CanReachLocation(req_loc))
-                    if restricted_on and items_any:
-                        parts.append(Or(*[Has(it) for it in items_any]))
-                    # Each region carries a count toward the target, so it
-                    # is listed once per unit it is worth.
-                    parts.append(AtLeast(n, *[CanReachRegion(r)
-                                              for r, c in counts.items()
-                                              for _ in range(c)]))
-                    return And(*parts) if len(parts) > 1 else parts[0]
+        # The racks are inside Entrance Plaza's storefronts. ep_shutter
+        # already carries CanReachRegion("Entrance Plaza").
+        world.set_rule(world.multiworld.get_location("Spin the Display Rack at Shootingstar Sporting Goods Right", world.player), ep_shutter)
+        world.set_rule(world.multiworld.get_location("Spin the Display Rack at Shootingstar Sporting Goods Left", world.player), ep_shutter)
+        world.set_rule(world.multiworld.get_location("Spin the Display Rack at Jason Wayne's Sporting Goods Front", world.player), ep_shutter)
+        world.set_rule(world.multiworld.get_location("Spin the Display Rack at Jason Wayne's Sporting Goods Back", world.player), ep_shutter)
 
-                _targets = [(_names[_i], _i + 1)
-                            for _i in range(min(_max, len(_names)))]
-                if len(_names) > _max:
-                    _targets.append((_names[-1], sum(_region_counts.values())))
-                for _name, _n in _targets:
-                    try:
-                        _loc = world.multiworld.get_location(_name, world.player)
-                    except KeyError:
-                        continue
-                    _rule = _make_count_rule(_n)
-                    if _shuttered:
-                        _rule = _gate_on_shutter(_rule)
-                    world.set_rule(_loc, _rule)
-                continue
-
-            # Build a list of (location_name, required_regions) tuples
-            # so each location gets its own rule reflecting its tier.
-            _per_loc: List[Any] = []
-            if _t == "single":
-                _regions = trigger_location_required_regions(_entry)
-                for _name in _names:
-                    _per_loc.append((_name, _regions))
-            elif _t == "counted":
-                # Per-count entries
-                for _i, _name in enumerate(_names[:_max]):
-                    _count = _i + 1
-                    _regions = trigger_location_required_regions(
-                        _entry, count=_count)
-                    _per_loc.append((_name, _regions))
-                # all-X variant uses the highest-tier regions
-                if len(_names) > _max:
-                    _all_regions = trigger_location_required_regions(
-                        _entry, is_all_variant=True)
-                    _per_loc.append((_names[-1], _all_regions))
-
-            for _name, _regions in _per_loc:
-                try:
-                    _loc = world.multiworld.get_location(_name, world.player)
-                except KeyError:
-                    continue
-                _rule = _make_rule(_regions, _alt_item, _req_loc, _items_any)
-                if _shuttered:
-                    _rule = _gate_on_shutter(_rule)
-                world.set_rule(_loc, _rule)
-
+        # Microwaves and stoves are counted mall-wide, so these name every
+        # region holding one. Their own region is the Security Room, which is
+        # sphere 0 and adds nothing.
+        world.set_rule(world.multiworld.get_location("Use All Microwaves", world.player), And(CanReachRegion("Paradise Plaza"), CanReachRegion("Food Court"), CanReachRegion("Al Fresca Plaza"), microwave_food))
+        if "Heat a pan on all stoves" not in _dropped:
+            if restricted_mode_on:
+                world.set_rule(world.multiworld.get_location("Heat a pan on all stoves", world.player), And(CanReachRegion("Paradise Plaza"), CanReachRegion("Food Court"), CanReachRegion("Al Fresca Plaza"), Has("Frying Pan")))
+            else:
+                world.set_rule(world.multiworld.get_location("Heat a pan on all stoves", world.player), And(CanReachRegion("Paradise Plaza"), CanReachRegion("Food Court"), CanReachRegion("Al Fresca Plaza")))
+        world.set_rule(world.multiworld.get_location("Spin All Display Racks", world.player), ep_shutter)
 
     # --------------------------------------------------------------------
     # Goal and victory
@@ -1382,7 +1820,8 @@ def set_rules(world) -> None:
     if world.options.goal.value == 2:
         savior_target = world.options.number_of_survivors.value
         savior_player = world.player
-        savior_rescue_locations = list(world.ALL_RESCUE_LOCATIONS)
+        savior_rescue_locations = [_l for _l in world.ALL_RESCUE_LOCATIONS
+                                   if _l not in _dropped]
 
         savior_rule = AtLeast(savior_target,
                               *[CanReachLocation(l) for l in savior_rescue_locations])
@@ -1397,6 +1836,23 @@ def set_rules(world) -> None:
         # isn't created at all, so there's nothing to mark.
         # Ending S is EVENT-category and skipped when it isn't the active
         # goal (see GOAL_ONLY_EVENT_LOCATIONS), so no handling needed.
+        if world.main_scoops_enabled:
+            world.multiworld.get_location(
+                "Ending A: Solve all of the cases and be on the helipad at 12pm",
+                world.player
+            ).progress_type = LocationProgressType.EXCLUDED
+
+    if world.psycho_mode:
+        psycho_rule = AtLeast(world.options.number_of_kills.value,
+                              *[CanReachLocation(l) for l in world.ALL_KILL_LOCATIONS
+                                if l not in _dropped])
+
+        world.set_rule(world.multiworld.get_location(world.PSYCHO_GOAL_LOCATION,
+                                                     world.player),
+                       psycho_rule)
+
+        # Same treatment Savior gives Ending A: it still exists as filler when
+        # main scoops are on, so keep progression out of it.
         if world.main_scoops_enabled:
             world.multiworld.get_location(
                 "Ending A: Solve all of the cases and be on the helipad at 12pm",

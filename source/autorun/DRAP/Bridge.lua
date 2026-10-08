@@ -130,6 +130,196 @@ function M.set_deathlink_enabled(v)
     M.log("DeathLink enabled: " .. tostring(M.deathlink_enabled))
 end
 
+------------------------------------------------------------
+-- DamageLink (protocol tag "SharedDamage")
+------------------------------------------------------------
+-- Bounces come back to the sender as well as to everyone else, so each one
+-- carries a uuid and a client ignores its own. Without that the room would
+-- feed its own damage back to itself for ever.
+
+-- The tag is SharedDamage with the group appended, so two slots only hear
+-- each other when their groups match. Empty is the default group, and matches
+-- every game that has no group option at all.
+local DAMAGE_TAG_BASE = "SharedDamage"
+local damage_group = ""
+
+local function damage_tag()
+    return DAMAGE_TAG_BASE .. damage_group
+end
+
+--- The tag this client actually listens on, for the status command.
+function M.get_damage_tag()
+    return damage_tag()
+end
+
+--- Set before the link is enabled: the tag is registered at connect time.
+function M.set_damagelink_group(name)
+    damage_group = tostring(name or "")
+    M.log(damage_group == "" and "DamageLink group: (default)"
+          or ("DamageLink group: " .. damage_group))
+end
+
+M.damagelink_enabled = false
+
+-- Identifies this client's own bounces. Not a real UUID -- it only has to be
+-- unlikely to collide with another player in the same room for one session.
+local damage_uuid = nil
+
+--- Called with the received damage in POINTS. Set by DamageLink.lua.
+M.on_shared_damage = nil
+
+function M.set_damagelink_enabled(v)
+    M.damagelink_enabled = (v == true)
+    M.log("DamageLink enabled: " .. tostring(M.damagelink_enabled))
+end
+
+local function get_damage_uuid()
+    if damage_uuid then return damage_uuid end
+    local slot = "?"
+    if AP_REF.APClient and AP_REF.APClient.get_slot then
+        local ok, v = pcall(AP_REF.APClient.get_slot, AP_REF.APClient)
+        if ok and v then slot = tostring(v) end
+    end
+    damage_uuid = string.format("drdr-%s-%d-%d", slot, os.time(),
+                                math.random(0, 999999))
+    return damage_uuid
+end
+
+local function handle_shared_damage(data)
+    if not M.damagelink_enabled then return end
+
+    -- This client's own bounce, echoed back.
+    if damage_uuid and tostring(data["uuid"] or "") == damage_uuid then return end
+
+    local points = tonumber(data["damage_points"])
+    if not points or points <= 0 then return end
+    local source = data["source"] or "someone"
+
+    M.log(string.format("DamageLink received: %s point(s) from %s",
+        tostring(points), tostring(source)))
+
+    if M.on_shared_damage then
+        pcall(M.on_shared_damage, points, tostring(source))
+    end
+end
+
+--- Broadcast damage taken, in POINTS.
+function M.send_shared_damage(points)
+    if not M.damagelink_enabled then return false end
+    if not AP_REF.APClient then return false end
+    if not is_connected() then return false end
+    points = tonumber(points)
+    if not points or points <= 0 then return false end
+
+    local now = math.floor(os.time())
+    if AP_REF.APClient.get_server_time then
+        local ok, t = pcall(AP_REF.APClient.get_server_time, AP_REF.APClient)
+        if ok and t then now = math.floor(tonumber(t) or os.time()) end
+    end
+
+    local my_alias = "DRDR Player"
+    if AP_REF.APClient.get_player_alias and AP_REF.APClient.get_slot then
+        local ok_slot, slot = pcall(AP_REF.APClient.get_slot, AP_REF.APClient)
+        if ok_slot and slot then
+            local ok_alias, alias = pcall(AP_REF.APClient.get_player_alias,
+                                          AP_REF.APClient, slot)
+            if ok_alias and alias then my_alias = Shared.clean_string(alias) end
+        end
+    end
+
+    local payload = {
+        time = now,
+        uuid = get_damage_uuid(),
+        source = my_alias,
+        damage_points = points,
+    }
+
+    if type(AP_REF.APClient.Bounce) ~= "function" then return false end
+    local ok, err = pcall(AP_REF.APClient.Bounce, AP_REF.APClient, payload,
+                          nil, nil, { damage_tag() })
+    if ok then
+        M.log(string.format("Sent DamageLink: %d point(s)", points))
+        return true
+    end
+    M.log.error("DamageLink send failed: " .. tostring(err))
+    return false
+end
+
+------------------------------------------------------------
+-- KnockbackLink (protocol tag "KnockbackLink")
+------------------------------------------------------------
+-- Same shape as DamageLink: bounces echo back to the sender, so each carries
+-- a uuid and a client ignores its own. The payload's "value" is a change in
+-- velocity -- x, y, z floats, +x east, +y up, +z south.
+
+local KNOCKBACK_TAG = "KnockbackLink"
+
+M.knockbacklink_enabled = false
+
+--- Called with the received {x, y, z} and the sender's name. Set by
+--- KnockbackLink.lua.
+M.on_knockback = nil
+
+function M.set_knockbacklink_enabled(v)
+    M.knockbacklink_enabled = (v == true)
+    M.log("KnockbackLink enabled: " .. tostring(M.knockbacklink_enabled))
+end
+
+local function handle_knockback(data)
+    if not M.knockbacklink_enabled then return end
+    if damage_uuid and tostring(data["uuid"] or "") == damage_uuid then return end
+
+    local value = data["value"]
+    if type(value) ~= "table" then return end
+    local source = data["source"] or "someone"
+    M.log(string.format("KnockbackLink received from %s: (%s, %s, %s)",
+        tostring(source), tostring(value.x), tostring(value.y), tostring(value.z)))
+    if M.on_knockback then
+        pcall(M.on_knockback, value, tostring(source))
+    end
+end
+
+--- Broadcast a knockback, as a change in velocity.
+function M.send_knockback(x, y, z)
+    if not M.knockbacklink_enabled then return false end
+    if not AP_REF.APClient then return false end
+    if not is_connected() then return false end
+
+    local now = math.floor(os.time())
+    if AP_REF.APClient.get_server_time then
+        local ok, t = pcall(AP_REF.APClient.get_server_time, AP_REF.APClient)
+        if ok and t then now = math.floor(tonumber(t) or os.time()) end
+    end
+
+    local my_alias = "DRDR Player"
+    if AP_REF.APClient.get_player_alias and AP_REF.APClient.get_slot then
+        local ok_slot, slot = pcall(AP_REF.APClient.get_slot, AP_REF.APClient)
+        if ok_slot and slot then
+            local ok_alias, alias = pcall(AP_REF.APClient.get_player_alias,
+                                          AP_REF.APClient, slot)
+            if ok_alias and alias then my_alias = Shared.clean_string(alias) end
+        end
+    end
+
+    local payload = {
+        time = now,
+        uuid = get_damage_uuid(),
+        source = my_alias,
+        cause = my_alias .. " got knocked about.",
+        value = { x = x, y = y, z = z },
+    }
+
+    if type(AP_REF.APClient.Bounce) ~= "function" then return false end
+    local ok, err = pcall(AP_REF.APClient.Bounce, AP_REF.APClient, payload,
+                          nil, nil, { KNOCKBACK_TAG })
+    if ok then
+        M.log(string.format("Sent KnockbackLink: (%.2f, %.2f, %.2f)", x, y, z))
+        return true
+    end
+    M.log.error("KnockbackLink send failed: " .. tostring(err))
+    return false
+end
+
 local function has_tag(tags, needle)
     if not tags or type(tags) ~= "table" then return false end
     for _, v in pairs(tags) do
@@ -139,9 +329,22 @@ local function has_tag(tags, needle)
 end
 
 local function handle_bounced(json_rows)
-    if not M.deathlink_enabled then return end
     if not json_rows or type(json_rows) ~= "table" then return end
 
+    -- Two links share this handler, so neither may return early on the
+    -- other's behalf. DamageLink first; a SharedDamage bounce is never also a
+    -- DeathLink one.
+    if has_tag(json_rows["tags"], damage_tag()) then
+        handle_shared_damage(json_rows["data"] or {})
+        return
+    end
+
+    if has_tag(json_rows["tags"], KNOCKBACK_TAG) then
+        handle_knockback(json_rows["data"] or {})
+        return
+    end
+
+    if not M.deathlink_enabled then return end
     if not has_tag(json_rows["tags"], "DeathLink") then return end
 
     local data = json_rows["data"] or {}
@@ -150,10 +353,10 @@ local function handle_bounced(json_rows)
 
     M.log("DeathLink received: " .. tostring(cause))
 
-    if _G.AP and _G.AP.DeathLink and _G.AP.DeathLink.kill_player then
-        pcall(_G.AP.DeathLink.kill_player, "DeathLink: " .. tostring(cause))
+    if _G.AP and _G.AP.DeathLink and _G.AP.DeathLink.receive then
+        pcall(_G.AP.DeathLink.receive, "DeathLink: " .. tostring(cause))
     else
-        M.log("DeathLink received, but AP.DeathLink.kill_player unavailable")
+        M.log("DeathLink received, but AP.DeathLink.receive unavailable")
     end
 end
 
@@ -473,6 +676,33 @@ function M.is_completed(loc_name)
     return Ledger.is_checked(loc_name)
 end
 
+--- Send a list of names as ONE LocationChecks, with no ledger entry.
+---
+--- For KillSanity, where a location per zombie would mean a ledger write
+--- per kill and a packet per kill. The kill count is the record instead
+--- (KillTracker), the server dedupes a resend, and the caller keeps the
+--- batch to retry when this returns false.
+--- @return boolean sent, number how many
+function M.check_batch(names)
+    if not Activation.is_active() then return false, 0 end
+    if not AP_REF.APClient or not is_connected() then return false, 0 end
+    local ids, unresolved = {}, 0
+    for _, name in ipairs(names or {}) do
+        local id = resolve_location_id(name)
+        if id then
+            table.insert(ids, tonumber(id) or id)
+        else
+            unresolved = unresolved + 1
+        end
+    end
+    if #ids == 0 then return false, 0 end
+    local ok = pcall(AP_REF.APClient.LocationChecks, AP_REF.APClient, ids)
+    M.log(string.format("Sent %d kill check(s) in one batch%s%s", #ids,
+        unresolved > 0 and string.format(" (%d unresolved)", unresolved) or "",
+        ok and "" or " -- FAILED"))
+    return ok == true, #ids
+end
+
 -- Arms the sync machine: on the next on_frame ticks, every unacked ledger
 -- name is resolved and sent as ONE batched LocationChecks (the server
 -- dedups). Names that can't resolve yet (data package still loading) keep
@@ -551,6 +781,13 @@ AP_REF.on_retrieved = function(a1, a2, a3)
             table_preview(a1), table_preview(a2), table_preview(a3)))
     end
 
+    -- The binding allows one retrieved handler, so anything else that reads
+    -- DataStorage is forwarded from here. KillTracker picks out its own keys
+    -- and ignores the rest.
+    if _G.AP and _G.AP.KillTracker and _G.AP.KillTracker.on_retrieved then
+        pcall(_G.AP.KillTracker.on_retrieved, a1, a2, a3)
+    end
+
     local key = ack_storage_key
     if not key then return end
     for _, cand in ipairs({ a1, a2, a3 }) do
@@ -569,6 +806,14 @@ AP_REF.on_retrieved = function(a1, a2, a3)
                 return
             end
         end
+    end
+end
+
+-- SetReply is the only confirmation a DataStorage write landed. Nothing in
+-- Bridge writes, so this exists purely to hand replies to the modules that do.
+AP_REF.on_set_reply = function(message)
+    if _G.AP and _G.AP.KillTracker and _G.AP.KillTracker.on_set_reply then
+        pcall(_G.AP.KillTracker.on_set_reply, message)
     end
 end
 
@@ -716,6 +961,31 @@ end
 -- reload.
 function M.has_completed_check(loc_name)
     return Ledger.is_checked(loc_name)
+end
+
+--- Did the PLAYER do this, as opposed to the server knowing about it?
+---
+--- For goal progress this is the question, not has_completed_check: that one
+--- is true for locations another world collected on the player's behalf.
+--- Includes this session's pending checks so it still works offline, where
+--- the ledger does not exist.
+function M.has_local_check(loc_name)
+    if not loc_name then return false end
+    if Ledger.is_checked_locally(loc_name) then return true end
+    return PENDING_CHECKS[loc_name] == true
+end
+
+--- Has this check been recorded AT ALL this session, ledger or not?
+---
+--- has_completed_check reads only the ledger, which does not exist until a
+--- slot connects -- so offline (debug mode, no server) a check that was very
+--- much made reads as missing. Callers deciding whether the player has DONE
+--- something want this one; callers deciding what to re-send on reconnect want
+--- the ledger.
+function M.is_check_recorded(loc_name)
+    if not loc_name then return false end
+    if Ledger.is_checked(loc_name) then return true end
+    return PENDING_CHECKS[loc_name] == true
 end
 
 -- Returns a fresh array of all completed-check location names. Used for
@@ -928,6 +1198,17 @@ end
 -- Item Application
 ------------------------------------------------------------
 
+-- KillSanity filler: thousands per seed, and every one of them again on a
+-- reconnect -- 53,594 at the genocide tier. They exist to fill kill
+-- locations and do nothing, so they take a fast lane: no per-item log, no
+-- toast, no entry in the received-items file, just a count per name and
+-- one summary line per batch. They still advance last_item_index, so the
+-- server does not replay them on every connect.
+local KILL_FILLER = { ["Zombie Guts"] = true, ["Brains"] = true, ["Rotten Flesh"] = true }
+local kill_filler_counts = {}   -- name -> received, for the status command
+local kill_filler_batch = {}    -- name -> received this batch
+local received_dirty = false    -- received-items file needs writing
+
 local function handle_net_item(net_item, is_replay)
     local item_id = net_item.item
     local sender = net_item.player
@@ -939,6 +1220,13 @@ local function handle_net_item(net_item, is_replay)
     -- Clean strings from AP client to remove any binary garbage
     local item_name = Shared.clean_string(item_name_raw)
     local sender_name = Shared.clean_string(sender_name_raw)
+
+    if KILL_FILLER[item_name] then
+        kill_filler_counts[item_name] = (kill_filler_counts[item_name] or 0) + 1
+        kill_filler_batch[item_name] = (kill_filler_batch[item_name] or 0) + 1
+        if not is_replay then received_dirty = true end
+        return
+    end
 
     M.log("Applying item index=" .. tostring(index) .. " id=" .. tostring(item_id) .. " (" .. item_name .. ") from " .. sender_name .. " (replay=" .. tostring(is_replay) .. ")")
 
@@ -958,9 +1246,9 @@ local function handle_net_item(net_item, is_replay)
             RECEIVED_ITEMS_BY_NAME[item_name] = (RECEIVED_ITEMS_BY_NAME[item_name] or 0) + 1
         end
 
-        -- Persist immediately so a crash/reset doesn't lose the receipt.
-        -- Mirrors the per-check save in M.check above.
-        save_received_items()
+        -- Written once per batch (on_frame), not once per item: a burst of
+        -- received items rewrote the whole file for each one.
+        received_dirty = true
     end
 
     local handled = ItemEffects.dispatch(net_item, item_name, sender_name, is_replay)
@@ -1082,8 +1370,30 @@ function M.on_frame()
                     handle_net_item(queued, false)
                 end
             end
+            if next(kill_filler_batch) then
+                local parts, total = {}, 0
+                for name, n in pairs(kill_filler_batch) do
+                    table.insert(parts, string.format("%s x%d", name, n))
+                    total = total + n
+                end
+                table.sort(parts)
+                M.log(string.format("KillSanity filler: %s (%d this batch)",
+                    table.concat(parts, ", "), total))
+                kill_filler_batch = {}
+            end
+            if received_dirty then
+                received_dirty = false
+                save_received_items()
+            end
         end
     end
+end
+
+--- KillSanity filler received so far, by name.
+function M.kill_filler_received()
+    local out = {}
+    for name, n in pairs(kill_filler_counts) do out[name] = n end
+    return out
 end
 
 M.AP_REF = AP_REF

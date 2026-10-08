@@ -65,6 +65,22 @@ function M.split_areas()
     return (data and data.split_areas) or {}
 end
 
+-- The Extra PP triggers, including each one's recorded object positions. A
+-- connected slot sends these in slot data; this is the debug path, where there
+-- is no slot to ask.
+function M.ap_trigger_locations()
+    ensure_loaded()
+    return (data and data.ap_trigger_locations) or {}
+end
+
+-- Region -> { tier -> { thresholds } } for the Zombie Kill Tiers option. A
+-- connected slot sends its own tier's thresholds, so this is only read when
+-- there is no slot to ask: the vanilla debug path.
+function M.zombie_kill_tiers()
+    ensure_loaded()
+    return (data and data.zombie_kill_tiers) or {}
+end
+
 -- Area code -> list of codes one door away. Used to answer "can the player
 -- get there yet" against the live door locks, which is what keeps a scoop
 -- from starting behind a door they cannot open.
@@ -134,7 +150,7 @@ function M.main_case_guides()
 end
 
 -- Bundled survivor spawn positions (stype-string -> {name, x, y, z, area,
--- state, hp}). SurvivorRecovery overlays locally-harvested positions on top.
+-- state, hp}).
 function M.survivor_positions()
     ensure_loaded()
     return (data and data.survivor_positions) or {}

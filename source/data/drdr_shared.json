@@ -1110,7 +1110,7 @@
       "item_number": 155
     },
     {
-      "name": "",
+      "name": "Rocket Launcher",
       "game_id": "ITEM_NO_ROCKET_R",
       "item_number": 157
     },
@@ -2901,7 +2901,20 @@
       "location_template_singular": "Walk on 1 Treadmill",
       "location_template_plural": "Walk on {n} Treadmills",
       "all_location_name": "Walk on All Treadmills",
-      "region": "Al Fresca Plaza"
+      "region": "Al Fresca Plaza",
+      "match": "player_dwell",
+      "move_min": 0.0001,
+      "seconds": 10.0,
+      "radius": 0.8,
+      "defer": 1.5,
+      "instances": [
+        { "name": "Walk on Treadmill 1", "region": "Al Fresca Plaza", "scene": "s900", "x": -57.98, "y": 0.30, "z": 171.88 },
+        { "name": "Walk on Treadmill 2", "region": "Al Fresca Plaza", "scene": "s900", "x": -56.48, "y": 0.30, "z": 171.88 },
+        { "name": "Walk on Treadmill 3", "region": "Al Fresca Plaza", "scene": "s900", "x": -54.98, "y": 0.30, "z": 171.88 },
+        { "name": "Walk on Treadmill 4", "region": "Al Fresca Plaza", "scene": "s900", "x": -53.48, "y": 0.30, "z": 171.88 },
+        { "name": "Walk on Treadmill 5", "region": "Al Fresca Plaza", "scene": "s900", "x": -51.98, "y": 0.30, "z": 171.88 },
+        { "name": "Walk on Treadmill 6", "region": "Al Fresca Plaza", "scene": "s900", "x": -50.48, "y": 0.30, "z": 171.88 }
+      ]
     },
     {
       "id": "pp_sandbag",
@@ -2913,7 +2926,15 @@
       "location_template_singular": "Destroy 1 Sandbag",
       "location_template_plural": "Destroy {n} Sandbags",
       "all_location_name": "Destroy All Sandbags",
-      "region": "Al Fresca Plaza"
+      "region": "Al Fresca Plaza",
+      "match": "object_broken",
+      "om_type": "uOm127",
+      "instances": [
+        { "name": "Destroy Sandbag 1", "region": "Al Fresca Plaza", "scene": "s900", "x": -40.80, "y": 2.90, "z": 183.50 },
+        { "name": "Destroy Sandbag 2", "region": "Al Fresca Plaza", "scene": "s900", "x": -43.30, "y": 2.90, "z": 183.50 },
+        { "name": "Destroy Sandbag 3", "region": "Al Fresca Plaza", "scene": "s900", "x": -45.80, "y": 2.90, "z": 183.50 },
+        { "name": "Destroy Sandbag 4", "region": "Al Fresca Plaza", "scene": "s900", "x": -48.20, "y": 2.90, "z": 183.50 }
+      ]
     },
     {
       "id": "pp_display_rack",
@@ -2926,7 +2947,18 @@
       "location_template_plural": "Spin {n} Display Racks",
       "all_location_name": "Spin All Display Racks",
       "region": "Entrance Plaza",
-      "ep_shutter": true
+      "ep_shutter": true,
+      "match": "object_rotation",
+      "om_type": "uOm122",
+      "state_field": "<mTurnSpd>k__BackingField",
+      "threshold": 360,
+      "defer": 1.5,
+      "instances": [
+        { "name": "Spin the Display Rack at Shootingstar Sporting Goods Right", "region": "Entrance Plaza", "scene": "s100", "x": 90.40, "y": 8.00, "z": 133.49 },
+        { "name": "Spin the Display Rack at Shootingstar Sporting Goods Left", "region": "Entrance Plaza", "scene": "s100", "x": 93.57, "y": 8.00, "z": 139.29 },
+        { "name": "Spin the Display Rack at Jason Wayne's Sporting Goods Front", "region": "Entrance Plaza", "scene": "s100", "x": 93.07, "y": 0.00, "z": 185.62 },
+        { "name": "Spin the Display Rack at Jason Wayne's Sporting Goods Back", "region": "Entrance Plaza", "scene": "s100", "x": 88.03, "y": 0.00, "z": 187.22 }
+      ]
     },
     {
       "id": "pp_food_court_dish",
@@ -2936,7 +2968,30 @@
       "max_count": 18,
       "location_template_singular": "Break 1 Food Court Wall Plate",
       "location_template_plural": "Break {n} Food Court Wall Plates",
-      "region": "Food Court"
+      "all_location_name": "Destroy all of the wall plates in the Food Court",
+      "region": "Food Court",
+      "match": "object_broken",
+      "om_type": "uOm13b",
+      "instances": [
+        { "name": "Break Dish 1 in Row 1 in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -76.70, "y": 7.10, "z": 142.40 },
+        { "name": "Break Dish 2 in Row 1 in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -76.70, "y": 7.10, "z": 144.80 },
+        { "name": "Break Dish 3 in Row 1 in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -76.70, "y": 7.10, "z": 147.20 },
+        { "name": "Break Dish 4 in Row 1 in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -76.70, "y": 7.10, "z": 149.60 },
+        { "name": "Break Dish 5 in Row 1 in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -76.70, "y": 7.10, "z": 152.00 },
+        { "name": "Break Dish 1 in Row 2 in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -76.70, "y": 5.70, "z": 142.40 },
+        { "name": "Break Dish 2 in Row 2 in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -76.70, "y": 5.70, "z": 144.20 },
+        { "name": "Break Dish 3 in Row 2 in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -76.70, "y": 5.70, "z": 150.20 },
+        { "name": "Break Dish 4 in Row 2 in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -76.70, "y": 5.70, "z": 152.00 },
+        { "name": "Break Dish 1 in Row 3 in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -76.70, "y": 4.20, "z": 142.40 },
+        { "name": "Break Dish 2 in Row 3 in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -76.70, "y": 4.20, "z": 144.20 },
+        { "name": "Break Dish 3 in Row 3 in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -76.70, "y": 4.20, "z": 150.20 },
+        { "name": "Break Dish 4 in Row 3 in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -76.70, "y": 4.20, "z": 152.00 },
+        { "name": "Break Dish 1 in Row 4 in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -76.70, "y": 2.80, "z": 142.40 },
+        { "name": "Break Dish 2 in Row 4 in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -76.70, "y": 2.80, "z": 144.80 },
+        { "name": "Break Dish 3 in Row 4 in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -76.70, "y": 2.80, "z": 147.20 },
+        { "name": "Break Dish 4 in Row 4 in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -76.70, "y": 2.80, "z": 149.60 },
+        { "name": "Break Dish 5 in Row 4 in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -76.70, "y": 2.80, "z": 152.00 }
+      ]
     },
     {
       "id": "pp_microwave",
@@ -2964,6 +3019,22 @@
       "alt_items_any": [
         "Uncooked Pizza",
         "Raw Meat"
+      ],
+      "match": "object_state",
+      "om_type": "uOm10c",
+      "state_field": "mRno0",
+      "state_enum": "solid.MT2RE.uOm10c.RNO",
+      "state_from": "RNO0_WAIT_COOK",
+      "instances": [
+        { "name": "Use the Microwave in Jill's Sandwiches", "region": "Paradise Plaza", "scene": "s200", "x": 97.80, "y": 0.00, "z": -40.98 },
+        { "name": "Use the Microwave in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -84.40, "y": 1.00, "z": 145.50 },
+        { "name": "Use the Microwave in That's a Spicy Meatball!", "region": "Food Court", "scene": "sa00", "x": -115.39, "y": 0.98, "z": 114.43 },
+        { "name": "Use the Microwave in Central Tacos", "region": "Food Court", "scene": "sa00", "x": -149.70, "y": 3.52, "z": 147.30 },
+        { "name": "Use the Microwave in Meaty's Burgers", "region": "Food Court", "scene": "sa00", "x": -144.87, "y": 3.52, "z": 167.20 },
+        { "name": "Use the Microwave in Jade Paradise", "region": "Food Court", "scene": "sa00", "x": -126.89, "y": 3.47, "z": 180.69 },
+        { "name": "Use the Microwave in Teresa's Oven", "region": "Food Court", "scene": "sa00", "x": -116.97, "y": 3.45, "z": 181.37 },
+        { "name": "Use the Microwave in Colombian Roastmasters - Al Fresca Plaza", "region": "Al Fresca Plaza", "scene": "s900", "x": -6.55, "y": 0.05, "z": 121.19 },
+        { "name": "Use the Microwave in Hamburger Fiefdom", "region": "Al Fresca Plaza", "scene": "s900", "x": 16.60, "y": 0.05, "z": 143.42 }
       ]
     },
     {
@@ -2984,7 +3055,18 @@
         "Al Fresca Plaza": 1,
         "Paradise Plaza": 2,
         "Food Court": 2
-      }
+      },
+      "match": "object_state",
+      "om_type": "uOm1f",
+      "state_field": "mAccessEnableFlag",
+      "state_from": true,
+      "instances": [
+        { "name": "Heat a pan on the Stove in Colombian Roastmasters - Paradise Plaza", "region": "Paradise Plaza", "scene": "s200", "x": 170.52, "y": 7.00, "z": 0.12 },
+        { "name": "Heat a pan on the Stove in Jill's Sandwiches", "region": "Paradise Plaza", "scene": "s200", "x": 97.80, "y": 0.00, "z": -46.73 },
+        { "name": "Heat a pan on the Stove in Chris's Fine Foods", "region": "Food Court", "scene": "sa00", "x": -89.39, "y": 1.00, "z": 140.80 },
+        { "name": "Heat a pan on the Stove in That's a Spicy Meatball!", "region": "Food Court", "scene": "sa00", "x": -109.91, "y": 0.98, "z": 120.15 },
+        { "name": "Heat a pan on the Stove in Colombian Roastmasters - Al Fresca Plaza", "region": "Al Fresca Plaza", "scene": "s900", "x": -6.58, "y": 0.05, "z": 112.55 }
+      ]
     }
   ],
   "scoops": [
@@ -3265,6 +3347,11 @@
       "completion_event": "Complete Bomb Collector",
       "chain_eligible": true,
       "events": [
+        "Bomb Collector - Entrance Plaza Truck",
+        "Bomb Collector - North Plaza Truck",
+        "Bomb Collector - Al Fresca Plaza Truck",
+        "Bomb Collector - Wonderland Plaza Truck",
+        "Bomb Collector - Seon's Food and Stuff Truck",
         "Complete Bomb Collector",
         "Beat Drivin Carlito"
       ],
@@ -3875,8 +3962,10 @@
     {
       "name": "Cut from the Same Cloth",
       "category": "Psychopath",
+      "chain_managed": true,
       "flags": [
-        779
+        779,
+        2507
       ],
       "npcs": [
         "Kent Day 1"
@@ -3884,6 +3973,10 @@
       "completion_event": "Complete Kent's day 1 photoshoot",
       "disp_flag": 2507,
       "disp_end_flag": 2541,
+      "engine_owns_box": true,
+      "disable_on_unlock": [
+        2541
+      ],
       "guide": {
         "scq_no": 32,
         "pos_tbl": 0,
@@ -3930,7 +4023,6 @@
       ],
       "completion_event": "Kill Roger and Jack (and Thomas if you want) and chat with Wayne",
       "disp_flag": 2526,
-      "disp_end_flag": 862,
       "guide": {
         "scq_no": 74,
         "pos_tbl": 17,
@@ -3963,14 +4055,7 @@
     {
       "name": "Photo Challenge",
       "category": "Psychopath",
-      "disable_flags": [
-        342,
-        344,
-        385,
-        843,
-        1224,
-        1277
-      ],
+      "chain_managed": true,
       "flags": [
         779,
         780,
@@ -3982,6 +4067,10 @@
       "completion_event": "Complete Kent's day 2 photoshoot",
       "disp_flag": 2508,
       "disp_end_flag": 2542,
+      "engine_owns_box": true,
+      "disable_on_unlock": [
+        2542
+      ],
       "guide": {
         "scq_no": 33,
         "pos_tbl": 1,
@@ -3993,19 +4082,15 @@
     {
       "name": "Photographer's Pride",
       "category": "Psychopath",
-      "disable_flags": [
-        352,
-        386,
-        387,
-        389,
-        844,
-        2183,
-        2444,
-        2509
-      ],
+      "chain_managed": true,
       "flags": [
+        779,
+        780,
         781,
-        2710
+        2710,
+        843,
+        844,
+        2509
       ],
       "npcs": [
         "Kent Day 3",
@@ -4013,6 +4098,11 @@
       ],
       "completion_event": "Kill Kent on day 3",
       "disp_flag": 2509,
+      "disp_end_flag": 1155,
+      "engine_owns_box": true,
+      "disable_on_unlock": [
+        1155
+      ],
       "guide": {
         "scq_no": 34,
         "pos_tbl": 2,
@@ -4079,6 +4169,25 @@
       "flags": [
         2082
       ]
+    },
+    {
+      "name": "Special Forces",
+      "category": "Psychopath",
+      "flags": [
+        309
+      ],
+      "clear_on_complete": true,
+      "keep_completed_on_new_game": true,
+      "npcs": [],
+      "completion_events": [
+        "Kill 10 Special Forces",
+        "Hella Copter - Shoot down the Special Forces Helicopter"
+      ],
+      "description": {
+        "location": "Anywhere",
+        "trigger": "Receive the Special Forces item",
+        "description": "The Overtime soldiers are loose in the mall. Kill 10 of them and shoot down their helicopter in Leisure Park to send them home."
+      }
     }
   ],
   "completion_flags": [
@@ -4180,6 +4289,31 @@
     {
       "flag": 2356,
       "event": "Complete Memories"
+    },
+    {
+      "flag": 2066,
+      "event": "Bomb Collector - Entrance Plaza Truck",
+      "scoop": "The Last Resort"
+    },
+    {
+      "flag": 2067,
+      "event": "Bomb Collector - North Plaza Truck",
+      "scoop": "The Last Resort"
+    },
+    {
+      "flag": 2068,
+      "event": "Bomb Collector - Al Fresca Plaza Truck",
+      "scoop": "The Last Resort"
+    },
+    {
+      "flag": 2069,
+      "event": "Bomb Collector - Wonderland Plaza Truck",
+      "scoop": "The Last Resort"
+    },
+    {
+      "flag": 2070,
+      "event": "Bomb Collector - Seon's Food and Stuff Truck",
+      "scoop": "The Last Resort"
     }
   ],
   "overtime_items": [
@@ -4769,5 +4903,91 @@
     "s700": ["s200", "s400", "s600", "sa00"],
     "s900": ["s100", "s600", "sa00"],
     "sa00": ["s300", "s600", "s700", "s900"]
+  },
+  "zombie_kill_tiers": {
+    "Paradise Plaza": {
+      "none": [],
+      "easy": [10, 25, 50, 100],
+      "normal": [10, 25, 50, 100, 250, 500],
+      "nightmare": [10, 25, 50, 100, 250, 500, 1000],
+      "genocide": [10, 25, 50, 100, 250, 500, 1000, 2000]
+    },
+    "Entrance Plaza": {
+      "none": [],
+      "easy": [10, 25, 50, 100],
+      "normal": [10, 25, 50, 100, 250, 500],
+      "nightmare": [10, 25, 50, 100, 250, 500, 1000],
+      "genocide": [10, 25, 50, 100, 250, 500, 1000, 2000]
+    },
+    "Al Fresca Plaza": {
+      "none": [],
+      "easy": [10, 25, 50, 100],
+      "normal": [10, 25, 50, 100, 250, 500],
+      "nightmare": [10, 25, 50, 100, 250, 500, 1000],
+      "genocide": [10, 25, 50, 100, 250, 500, 1000, 2000]
+    },
+    "Food Court": {
+      "none": [],
+      "easy": [10, 25, 50, 100],
+      "normal": [10, 25, 50, 100, 250, 500],
+      "nightmare": [10, 25, 50, 100, 250, 500, 1000],
+      "genocide": [10, 25, 50, 100, 250, 500, 1000, 2000]
+    },
+    "Wonderland Plaza": {
+      "none": [],
+      "easy": [10, 25, 50, 100],
+      "normal": [10, 25, 50, 100, 250, 500],
+      "nightmare": [10, 25, 50, 100, 250, 500, 1000],
+      "genocide": [10, 25, 50, 100, 250, 500, 1000, 2000]
+    },
+    "North Plaza": {
+      "none": [],
+      "easy": [10, 25, 50, 100],
+      "normal": [10, 25, 50, 100, 250, 500],
+      "nightmare": [10, 25, 50, 100, 250, 500, 1000],
+      "genocide": [10, 25, 50, 100, 250, 500, 1000, 2000]
+    },
+    "Crislip's Home Saloon": {
+      "none": [],
+      "easy": [10, 25, 50],
+      "normal": [10, 25, 50, 100],
+      "nightmare": [10, 25, 50, 100, 250, 500],
+      "genocide": [10, 25, 50, 100, 250, 500, 1000]
+    },
+    "Seon's Food and Stuff": {
+      "none": [],
+      "easy": [10, 25, 50],
+      "normal": [10, 25, 50, 100],
+      "nightmare": [10, 25, 50, 100, 250, 500],
+      "genocide": [10, 25, 50, 100, 250, 500, 1000]
+    },
+    "Colby's Movieland": {
+      "none": [],
+      "easy": [10, 25, 50],
+      "normal": [10, 25, 50, 100],
+      "nightmare": [10, 25, 50, 100, 250, 500],
+      "genocide": [10, 25, 50, 100, 250, 500, 1000]
+    },
+    "Leisure Park": {
+      "none": [],
+      "easy": [10, 25, 50, 100, 250, 500],
+      "normal": [10, 25, 50, 100, 250, 500, 1000],
+      "nightmare": [10, 25, 50, 100, 250, 500, 1000, 2000],
+      "genocide": [10, 25, 50, 100, 250, 500, 1000, 2000, 5000, 10000]
+    },
+    "Maintenance Tunnel": {
+      "none": [],
+      "easy": [10, 25, 50, 100, 250, 500, 1000],
+      "normal": [10, 25, 50, 100, 250, 500, 1000, 2000],
+      "nightmare": [10, 25, 50, 100, 250, 500, 1000, 2000, 5000],
+      "genocide": [10, 25, 50, 100, 250, 500, 1000, 2000, 5000, 10000, 15000, 20000, 27594]
+    },
+    "Warehouse": {
+      "none": [],
+      "easy": [10, 25, 50],
+      "normal": [10, 25, 50, 100],
+      "nightmare": [10, 25, 50, 100, 250, 500],
+      "genocide": [10, 25, 50, 100, 250, 500, 1000]
+    }
   }
 }

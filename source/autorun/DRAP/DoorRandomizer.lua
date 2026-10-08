@@ -335,6 +335,9 @@ local function install_hook()
             area_jump_method,
             -- Pre-hook: intercept and potentially redirect
             function(args)
+                -- When a door was last used, so anything that must not land
+                -- mid-load (PlayerReady) can tell a load screen is coming.
+                M.last_jump_at = os.clock()
                 pcall(function()
                     local hit_data_arg = args[3]
                     if not hit_data_arg then return end
@@ -738,7 +741,7 @@ end
 -- Existing HIT_DATA Borrowing (for warp)
 ------------------------------------------------------------
 
--- The last HIT_DATA we managed to borrow, kept across areas. The Cave has
+-- The last HIT_DATA we managed to borrow, kept across areas. The tunnel has
 -- none of its own, so without this the warp works in one direction only:
 -- you can get in and then cannot get out.
 local last_hit_data = nil
@@ -798,6 +801,30 @@ end
 function M.warp_to(area_name, pos, angle, label)
     if not ensure_area_jump_method() then return false end
 
+    -- Bring the party. A warp skips the engine's door path, so
+    -- checkCarryOverNpc never runs and NpcCarryover never sees the crossing --
+    -- escorts were left behind in the old area. Done BEFORE the player moves,
+    -- because members are matched against the area they are standing in.
+    local carryover = _G.AP and _G.AP.NpcCarryover
+    if not carryover then
+        M.log("carry-over: AP.NpcCarryover missing -- party not brought")
+    elseif type(carryover.carry_party_to) ~= "function" then
+        M.log("carry-over: carry_party_to missing -- party not brought")
+    else
+        -- Errors reported, not swallowed: a bare pcall here hid the failure
+        -- completely and looked identical to the call never happening.
+        -- Open the verdict window FIRST: the engine runs its own carry-over
+        -- pass during the jump and normally refuses a warp's area pair, and
+        -- rewriting the records alone does not move anyone.
+        if type(carryover.begin_warp_carry) == "function" then
+            pcall(carryover.begin_warp_carry)
+        end
+        local ok, err = pcall(carryover.carry_party_to, area_name, pos)
+        if not ok then
+            M.log("carry-over failed: " .. tostring(err))
+        end
+    end
+
     local ahlm = ahlm_mgr:get()
     if not ahlm then
         M.log("Cannot warp: AreaHitLayoutManager not available")
@@ -805,7 +832,7 @@ function M.warp_to(area_name, pos, angle, label)
     end
 
     -- Built rather than borrowed. Borrowing rewrites a real door's
-    -- destination, which persists until that layout reloads -- and the Cave
+    -- destination, which persists until that layout reloads -- and the tunnel
     -- has no doors to borrow in the first place. HIT_DATA is a managed class
     -- with a vtable, so one can be made; the caller sets every field the jump
     -- reads and the other 32 default harmlessly.
@@ -849,14 +876,14 @@ function M.warp_to(area_name, pos, angle, label)
     return false
 end
 
--- Spots inside the Overtime Cave, read with drap_player_pos() while standing
--- in each. Not door anchors -- the Cave has no doors we can capture, and
+-- Spots inside the Clock Tower Tunnel, read with drap_player_pos() while
+-- standing in each. Not door anchors -- it has no doors we can capture, and
 -- sb01/sb02 are joined by a load zone -- so these are player positions, which
 -- is what makes them safe to land on.
 --
--- Reaching the Cave normally costs five queens, so without these the only way
+-- Reaching it normally costs five queens, so without these the only way
 -- to test anything past Isabela is to play the whole chain again.
-local CAVE_SPOTS = {
+local TUNNEL_SPOTS = {
     entrance     = { "sb00", { x =  -3.600, y = -16.576, z =  -61.500 } },
     middle       = { "sb01", { x =  -0.361, y = -47.451, z = -336.366 } },
     exit         = { "sb02", { x =  -0.457, y = -50.073, z = -346.448 } },
@@ -900,27 +927,53 @@ local function build_warp_targets()
         pair_count[key] = (pair_count[key] or 0) + 1
     end
 
+    -- A door record's `position` is where the player ARRIVES in `to`, so
+    -- warping with it walks them through the door. The picker groups doors
+    -- under `from` and labels them "<from> - <to>", which reads as "the door
+    -- in <from>" -- so it should land them in `from`, at that door.
+    --
+    -- Every door has a reverse record (all 54 checked), and the reverse of
+    -- A->B arrives in A beside the same doorway. That is the position to use.
+    local reverse = {}
+    for _, d in ipairs(loaded.doors) do
+        reverse[tostring(d.to) .. "|" .. tostring(d.from) .. "|"
+            .. tostring(d.door_no or 0)] = d
+    end
+
     warp_targets = {}
     for _, d in ipairs(loaded.doors) do
         local label = display_name(d.from) .. " - " .. display_name(d.to) .. " Door"
         if (pair_count[tostring(d.from) .. "|" .. tostring(d.to)] or 0) > 1 then
             label = label .. " " .. tostring((d.door_no or 0) + 1)
         end
+        local back = reverse[tostring(d.from) .. "|" .. tostring(d.to) .. "|"
+            .. tostring(d.door_no or 0)]
         local list = warp_targets[d.from]
         if not list then list = {}; warp_targets[d.from] = list end
         list[#list + 1] = {
-            label = label, to = d.to, door_no = d.door_no or 0,
-            pos = d.position, angle = d.angle,
+            label = label,
+            -- Where the warp actually goes: the selected area, near the door.
+            area = back and d.from or d.to,
+            pos = back and back.position or d.position,
+            angle = back and back.angle or d.angle,
+            -- Kept for callers that want the far side.
+            to = d.to,
+            door_no = d.door_no or 0,
+            -- False when no reverse record exists, so the UI can say the warp
+            -- falls through to the far side rather than silently doing it.
+            near_side = back ~= nil,
         }
     end
 
-    -- The Cave has no doors, so its spots ride along as their own area.
-    for name, entry in pairs(CAVE_SPOTS) do
+    -- The tunnel has no doors, so its spots ride along as their own area.
+    for name, entry in pairs(TUNNEL_SPOTS) do
         local code = entry[1]
         local list = warp_targets[code]
         if not list then list = {}; warp_targets[code] = list end
         list[#list + 1] = {
             label = display_name(code) .. " - " .. name, to = code,
+            -- A spot, not a doorway: it already lands inside its own area.
+            area = code, near_side = true,
             door_no = 0, pos = entry[2], angle = nil,
         }
     end
@@ -942,14 +995,14 @@ end
 
 function M.area_display_name(code) return display_name(code) end
 
---- @param spot string one of CAVE_SPOTS; lists them when omitted or unknown
-function M.warp_to_cave(spot)
-    local entry = CAVE_SPOTS[tostring(spot or "")]
+--- @param spot string one of TUNNEL_SPOTS; lists them when omitted or unknown
+function M.warp_to_tunnel(spot)
+    local entry = TUNNEL_SPOTS[tostring(spot or "")]
     if not entry then
         local names = {}
-        for k in pairs(CAVE_SPOTS) do names[#names + 1] = k end
+        for k in pairs(TUNNEL_SPOTS) do names[#names + 1] = k end
         table.sort(names)
-        M.log("usage: drap_warp_cave(\"" .. table.concat(names, "\" | \"") .. "\")")
+        M.log("usage: drap_warp_tunnel(\"" .. table.concat(names, "\" | \"") .. "\")")
         return false
     end
     local info = Shared.SCENE_INFO[entry[1]]
@@ -995,11 +1048,11 @@ end
 --- of it and a reload is the only recovery.
 _G.drap_warp_home = function() return M.warp_to_security_room() end
 
---- drap_warp_cave("humvee") -- straight to the tank fight trigger
-_G.drap_warp_cave = function(spot) return M.warp_to_cave(spot) end
+--- drap_warp_tunnel("humvee") -- straight to the tank fight trigger
+_G.drap_warp_tunnel = function(spot) return M.warp_to_tunnel(spot) end
 
 --- Logs the area and position on every area change. Left on, walking or
---- warping through the Cave records all five scenes without anyone having to
+--- warping through the tunnel records all five scenes without anyone having to
 --- remember to type anything -- which is how the codes got lost last time.
 _G.drap_trace_areas = function(on)
     trace_areas = (on ~= false)

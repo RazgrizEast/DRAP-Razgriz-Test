@@ -1,15 +1,20 @@
 # world/drdr/__init__.py
 import re
-from typing import Any, Dict, Set, List
+from typing import Any, ClassVar, Dict, Set, List
 
 from BaseClasses import MultiWorld, Region, Item, Entrance, Tutorial, ItemClassification
-from Options import OptionError
+from Options import OptionError, item_and_loc_options
 
 from worlds.AutoWorld import World, WebWorld
 
-from .Items import DRItem, DRItemCategory, item_dictionary, key_item_names, item_descriptions, BuildItemPool, specialty_items, progression_skills, microwave_food_items, challenge_tool_items
-from .Locations import DRLocation, DRLocationCategory, location_tables, location_dictionary
-from .Options import DROption, dr_option_groups
+from .Items import DRItem, DRItemCategory, item_dictionary, key_item_names, item_descriptions, BuildItemPool, specialty_items, progression_skills, microwave_food_items, challenge_tool_items, kill_filler_items, KENT_DAYS, PROGRESSIVE_KENT
+from .Locations import kill_sanity_location_groups
+from .Locations import (DRLocation, DRLocationCategory, location_tables,
+                        location_dictionary, ZOMBIE_KILL_TIERS,
+                        ZOMBIE_KILL_TIER_NAMES, zombie_kill_locations,
+                        ZOMBIE_KILL_REGION_OF, KILL_SANITY_TOPS,
+                        kill_sanity_location_name)
+from .Options import DROption, dr_option_groups, DRDRSettings
 
 
 from .DoorRandomization import (
@@ -72,7 +77,9 @@ def _validate_shared_scoops() -> None:
             s.get("category") in ("Survivor", "Psychopath")
             or (s.get("category") == "Main" and s.get("chain_eligible"))
         )
-        if needs_item and name not in all_items:
+        # Kent's days arrive as Progressive Kent Scoop copies instead.
+        item = PROGRESSIVE_KENT if name in KENT_DAYS else name
+        if needs_item and item not in all_items:
             problems.append(f"scoop '{name}' is not an item in Items.py")
         event = s.get("completion_event")
         if event and event not in all_locations:
@@ -117,6 +124,60 @@ _validate_shared_scoops()
 
 # Locations that require waiting for in-game time to pass.
 # When ScoopSanity is enabled, time is frozen, so these are unobtainable.
+# Locations that need a survivor alive and friendly, which Psycho does not
+# allow: the rescue ladder is uncollectable once rescuing fails a scoop, and
+# the escort challenges are impossible once survivors turn hostile.
+PSYCHO_EXCLUDED_LOCATIONS = {
+    "Rescue 5 survivors", "Rescue 10 survivors", "Rescue 15 survivors",
+    "Rescue 20 survivors", "Rescue 25 survivors", "Rescue 30 survivors",
+    "Rescue 35 survivors", "Rescue 40 survivors", "Rescue 45 survivors",
+    "Rescue 48 survivors",
+    "Escort 8 survivors at once",
+    "Frank the pimp",
+    "Get 50 survivors to join",
+    # The reliable 10,000 PP shot is Jeff and Natalie hugging on the rooftop,
+    # and under Psycho they are targets, not a couple. No other spot has been
+    # confirmed to give it consistently.
+    "Get 10000 PP in one photo",
+}
+
+# Checks that need something in Frank's hands. Spitter Only takes every weapon
+# out of the pool, and Restricted Item Mode leaves no other way to pick one up,
+# so none of these can be finished however long the player spits.
+SPITTER_EXCLUDED_LOCATIONS = {
+    # Swinging or firing something.
+    "Fire 30 bullets",
+    "Fire 300 bullets",
+    "Bowl over 5 zombies",
+    "Costume Party - Put novelty masks on 10 zombies",
+    "Hit a golf ball 100 feet",
+    "Hit 10 zombies with a parasol",
+    "Kill 100 zombies with an RPG",
+    # A pan has to go on the burner.
+    "Heat a pan on the Stove in Colombian Roastmasters - Paradise Plaza",
+    "Heat a pan on the Stove in Jill's Sandwiches",
+    "Heat a pan on the Stove in Chris's Fine Foods",
+    "Heat a pan on the Stove in That's a Spicy Meatball!",
+    "Heat a pan on the Stove in Colombian Roastmasters - Al Fresca Plaza",
+    "Heat a pan on all stoves",
+    # The helicopter has to be SHOT down, and spit does not reach it. The
+    # soldiers still leave: the runtime drops this from the Special Forces
+    # scoop's completion set under this mode, so killing ten of them is the
+    # whole scoop.
+    "Hella Copter - Shoot down the Special Forces Helicopter",
+    # Paul is on fire and only an extinguisher puts him out. Meeting and
+    # defeating him still work, and under Psycho so does killing him -- it is
+    # only the rescue that needs the extinguisher.
+    "Rescue Paul Carson",
+    # 48 rescues means every survivor in the game, and Paul is no longer one
+    # of them.
+    "Rescue 48 survivors",
+}
+
+# The most survivors still rescuable once Paul is out, which caps the Savior
+# goal so it cannot ask for a rescue that cannot happen.
+SPITTER_MAX_SURVIVORS = 47
+
 SCOOP_SANITY_EXCLUDED_LOCATIONS = {
     "Survive until 7pm on day 1",
     "Meet back at the Security Room at 6am day 2",
@@ -143,7 +204,21 @@ class DRWeb(WebWorld):
     option_groups = dr_option_groups
 
 
+def _stock_position(option):
+    for index, stock in enumerate(item_and_loc_options):
+        if issubclass(option, stock):
+            return index
+    return len(item_and_loc_options)
+
+
+# Each location picker takes the place of the stock option it extends.
+for _group in DRWeb.option_groups:
+    if _group.name == "Item & Location Options":
+        _group.options.sort(key=_stock_position)
+
+
 class DRWorld(World):
+    settings: ClassVar[DRDRSettings]
     """
     Dead Rising is a game about re-killing people and taking photos.
     """
@@ -160,6 +235,7 @@ class DRWorld(World):
     required_client_version = (0, 5, 0)
     item_name_to_id = DRItem.get_name_to_id()
     location_name_to_id = DRLocation.get_name_to_id()
+    location_name_groups = kill_sanity_location_groups
     item_name_groups = {}
     item_descriptions = item_descriptions
 
@@ -169,24 +245,99 @@ class DRWorld(World):
         self.locked_locations = []
         self.enabled_location_categories = set()
         self.door_redirects = {}
+        # Area pairs a shuffled door joins, both directions (Door Locks).
+        self.door_joined_pairs = set()
         self.scoop_order = []
 
     def generate_early(self):
+        # Spitter Only turns two other options on, and both are read below, so
+        # it has to come first.
+        self.spitter_only = bool(self.options.spitter_only.value)
+        if self.spitter_only:
+            # Restricted Item Mode does half the work: without it the mall is
+            # still full of weapons to pick up and an empty pool changes
+            # nothing.
+            self.options.restricted_item_mode.value = 1
+            self.options.scoop_sanity.value = 1
+            # Paul cannot be rescued without an extinguisher, so the Savior
+            # goal must not be able to ask for all 48.
+            if self.options.number_of_survivors.value > SPITTER_MAX_SURVIVORS:
+                self.options.number_of_survivors.value = SPITTER_MAX_SURVIVORS
+
         # Savior+ScoopSanity drops main scoops entirely — the player wins by
         # rescuing survivors, so main scoops would only advance unused state.
         self.main_scoops_enabled = not (
-            self.options.goal.value == 2 and self.options.scoop_sanity
+            self.options.goal.value in (2, 3, 4) and self.options.scoop_sanity
         )
 
-        self.enabled_location_categories.add(DRLocationCategory.SURVIVOR)
+        # Psycho turns every rescue into a kill. Rescuing FAILS a scoop in this
+        # mode, so the Rescue checks could never be collected -- they are
+        # dropped and the Kill checks take their place.
+        self.psycho_mode = self.options.goal.value == 4
+
+        if self.psycho_mode:
+            self.enabled_location_categories.add(DRLocationCategory.KILL_SURVIVOR)
+        else:
+            self.enabled_location_categories.add(DRLocationCategory.SURVIVOR)
         self.enabled_location_categories.add(DRLocationCategory.LEVEL_UP)
         self.enabled_location_categories.add(DRLocationCategory.PP_STICKER)
+        self.enabled_location_categories.add(DRLocationCategory.CAMERA_PART)
         if self.main_scoops_enabled:
             self.enabled_location_categories.add(DRLocationCategory.MAIN_SCOOP)
         if self.options.goal.value == 0:  # Ending S
             self.enabled_location_categories.add(DRLocationCategory.OVERTIME_SCOOP)
+        # The two Special Forces checks are reachable either in Overtime (Ending
+        # S) or during the 72 hours when the soldiers are in the mall. Enabled by
+        # either; Rules decides which way they are actually reached.
+        if (self.options.goal.value == 0
+                or (self.options.special_forces_mode.value
+                    and self.options.scoop_sanity.value)):
+            self.enabled_location_categories.add(
+                DRLocationCategory.SPECIAL_FORCES_SCOOP)
         self.enabled_location_categories.add(DRLocationCategory.PSYCHO_SCOOP)
         self.enabled_location_categories.add(DRLocationCategory.CHALLENGE)
+        # Every kill location exists in the tables so IDs stay stable; the
+        # tier decides which are created.
+        self.zombie_kill_tier = ZOMBIE_KILL_TIER_NAMES[
+            self.options.zombie_kill_tiers.value]
+        # The Genocider goal is the top tier by definition, so it forces it
+        # rather than generating a seed that cannot be won.
+        if self.options.goal.value == 3:
+            self.zombie_kill_tier = "genocide"
+        # Restricted Item Mode implies Car Keys -- the keys were asked for as
+        # part of that mode, and locking every pickup while leaving the cars
+        # free to drive reads as an oversight. Promoted here so the item pool,
+        # the rules and slot_data all agree without repeating the condition.
+        if self.options.restricted_item_mode:
+            self.options.car_keys.value = 1
+        _kill_active = set(zombie_kill_locations(self.zombie_kill_tier))
+        self._zombie_kill_excluded_names = {
+            n for n in zombie_kill_locations("genocide") if n not in _kill_active
+        }
+        if _kill_active:
+            self.enabled_location_categories.add(DRLocationCategory.ZOMBIE_KILL)
+        # KillSanity: per area, kills 1..top-at-tier are locations; the
+        # rest of the table is skipped in create_region like the tiers.
+        self.kill_sanity_tops = {}
+        if (self.options.kill_sanity and self.zombie_kill_tier == "genocide"
+                and not bool(self.settings.killsanity_genocide_allowed)):
+            raise OptionError(
+                f"{self.player_name}: kill_sanity with zombie_kill_tiers: genocide "
+                "is 53,594 locations and takes minutes to generate. The host has "
+                "to allow it with killsanity_genocide_allowed: true under "
+                "drdr_options in host.yaml.")
+        if self.options.kill_sanity and _kill_active:
+            for _region, _tiers in ZOMBIE_KILL_TIERS.items():
+                _active = _tiers.get(self.zombie_kill_tier, [])
+                if _active:
+                    self.kill_sanity_tops[_region] = max(_active)
+        self._kill_sanity_excluded_names = {
+            kill_sanity_location_name(n, region)
+            for region, top in KILL_SANITY_TOPS.items()
+            for n in range(self.kill_sanity_tops.get(region, 0) + 1, top + 1)
+        }
+        if self.kill_sanity_tops:
+            self.enabled_location_categories.add(DRLocationCategory.KILL_SANITY)
         if self.options.pp_bonus_locations:
             self.enabled_location_categories.add(DRLocationCategory.PP_BONUS)
 
@@ -210,15 +361,31 @@ class DRWorld(World):
                     for _n in expand_trigger_location_names(_entry):
                         self._pp_bonus_excluded_names.add(_n)
 
+        # The Space Rider does not run at night, so its PP bonus cannot be
+        # earned in a seed that forces night. Hardcore implies night, same as
+        # in fill_slot_data.
+        if bool(self.options.night_mode_enabled.value) or bool(
+                self.options.hardcore_zombies_enabled.value):
+            self._pp_bonus_excluded_names.add("Ride the Space Rider")
+
         # Door Locks needs the shuffled layout in the region graph and a
-        # two-way guarantee, so it is paired mode only. Split Keys is not
-        # supported yet -- its keys name area pairs, which the shuffle breaks.
+        # two-way guarantee, so it is paired mode only.
         self.door_locks_active = bool(
             self.options.door_randomizer
             and self.options.door_locks
             and self.options.door_randomizer_mode.value == DOOR_MODE_PAIRED
-            and not self.options.split_keys
         )
+
+        # Door Locks gates each door by the key for the area it now leads to,
+        # so the area keys are the ones that have to be in play. Split Keys
+        # names door pairs instead, which the shuffle has already broken.
+        # Clamped at the option rather than tracked alongside it, because the
+        # item pool and the rules both read it in a dozen places and a second
+        # flag would only have to agree with this one.
+        self.split_keys_clamped = bool(
+            self.door_locks_active and self.options.split_keys)
+        if self.split_keys_clamped:
+            self.options.split_keys.value = 0
 
         # Under ScoopSanity the mall opens off the Security Room door, and that
         # door only opens after Jessie -- who is in the Warehouse. So the route
@@ -253,19 +420,29 @@ class DRWorld(World):
             # Get the door randomizer mode (0 = chaos, 1 = paired)
             door_mode = self.options.door_randomizer_mode.value
 
-            # Generate door redirects for this player using per-slot random
-            # This ensures each player gets a unique door layout even with the same server seed
-            self.door_redirects = generate_door_randomization_for_ap(
-                self.random,
-                mode=door_mode,
-                randomize_rooftop_service_hallway=bool(
-                    self.options.randomize_rooftop_service_hallway_doors
-                ),
-                # ScoopSanity unlocks the Security Room <-> Entrance Plaza
-                # door pair (no longer cutscene-only after Jessie), so they
-                # become randomizable+walkable.
-                scoop_sanity=bool(self.options.scoop_sanity.value),
-            )
+            # Universal Tracker re-generation: take the seed's real layout from
+            # slot data. Door Locks rules follow the layout, so a fresh roll
+            # gave the tracker a different map from the server's.
+            _passthrough = getattr(self.multiworld, "re_gen_passthrough", None)
+            _ut_doors = None
+            if _passthrough and self.game in _passthrough:
+                _ut_doors = (_passthrough[self.game] or {}).get("door_redirects")
+            if _ut_doors is not None:
+                self.door_redirects = dict(_ut_doors)
+            else:
+                # Generate door redirects for this player using per-slot random
+                # This ensures each player gets a unique door layout even with the same server seed
+                self.door_redirects = generate_door_randomization_for_ap(
+                    self.random,
+                    mode=door_mode,
+                    randomize_rooftop_service_hallway=bool(
+                        self.options.randomize_rooftop_service_hallway_doors
+                    ),
+                    # ScoopSanity unlocks the Security Room <-> Entrance Plaza
+                    # door pair (no longer cutscene-only after Jessie), so they
+                    # become randomizable+walkable.
+                    scoop_sanity=bool(self.options.scoop_sanity.value),
+                )
 
         # If ScoopSanity is enabled, generate a randomized main scoop order and precollect all time keys
         if self.options.scoop_sanity:
@@ -306,10 +483,31 @@ class DRWorld(World):
             self.multiworld.push_precollected(self.create_item("Maintenance Tunnel Access Key"))
 
     
+    # Locations whose id table is not the region they are reached in. The id
+    # is positional within its table, so the row stays where it is and only
+    # the region it is created in moves. Stickers 98 and 99 are photographed
+    # in Paradise Plaza from the raincoat encounter but were filed under
+    # Leisure Park, which made Leisure Park a requirement nothing asked for
+    # (#65). Their rules already carry the cult requirement.
+    REGION_OVERRIDES = {
+        "Photograph PP Sticker 98": "Paradise Plaza",
+        "Photograph PP Sticker 99": "Paradise Plaza",
+    }
+
+    def _region_table(self, region_name):
+        rows = [loc for loc in location_tables[region_name]
+                if self.REGION_OVERRIDES.get(loc.name, region_name) == region_name]
+        for table_name, table in location_tables.items():
+            if table_name == region_name:
+                continue
+            rows.extend(loc for loc in table
+                        if self.REGION_OVERRIDES.get(loc.name) == region_name)
+        return rows
+
     def create_regions(self):
         regions: Dict[str, Region] = {}
         regions["Menu"] = self.create_region("Menu", [])
-        regions.update({region_name: self.create_region(region_name, location_tables[region_name]) for region_name in [
+        regions.update({region_name: self.create_region(region_name, self._region_table(region_name)) for region_name in [
             "Heliport",
             "Security Room",
             "Rooftop",
@@ -327,9 +525,11 @@ class DRWorld(World):
             "Maintenance Tunnel",
             "Meat Processing Area",
             "Carlito's Hideout",
-            "Cave",
+            "Clock Tower Tunnel",
             "Level Ups",
-            "Challenges"
+            "Challenges",
+            "Zombie Kills",
+            "Kill Sanity"
         ]})
 
         # Area pairs that a real door joins in the vanilla table. Under Door
@@ -383,6 +583,7 @@ class DRWorld(World):
                     connection = Entrance(self.player, f"{x} -> {y}", regions[x])
                     regions[x].exits.append(connection)
                     connection.connect(regions[y])
+            self.door_joined_pairs = set(seen)
             return len(seen)
 
         create_connection("Menu", "Heliport")
@@ -453,22 +654,47 @@ class DRWorld(World):
         
         create_connection("Seon's Food and Stuff", "North Plaza")
 
-        create_connection("Carlito's Hideout", "Cave")
-        create_connection("Leisure Park", "Cave")
+        create_connection("Carlito's Hideout", "Clock Tower Tunnel")
+        create_connection("Leisure Park", "Clock Tower Tunnel")
 
         create_connection("Menu", "Level Ups")
         create_connection("Menu", "Challenges")
+        # Reached from Menu, not from the areas they name: their rules are
+        # written out in Rules.py so the prologue ones can skip the area.
+        create_connection("Menu", "Zombie Kills")
+        create_connection("Menu", "Kill Sanity")
 
 
     GOAL_LOCATIONS = {
         0: "Ending S: Beat up Brock with your bare fists!",   # Ending S
         1: "Ending A: Solve all of the cases and be on the helipad at 12pm",  # Ending A
         2: "Savior: Rescue enough survivors to escape",        # Savior (count-based)
+        3: "Zombie Genocider: Kill 53,594 zombies across the mall",
+        4: "Psycho: Kill enough survivors to escape",
     }
 
     # Name of the goal location used by the Savior goal. Must match the entry
     # added at the end of location_tables["Security Room"] in Locations.py.
     SAVIOR_GOAL_LOCATION = "Savior: Rescue enough survivors to escape"
+
+    # Name of the goal location used by the Psycho goal.
+    PSYCHO_GOAL_LOCATION = "Psycho: Kill enough survivors to escape"
+
+    # Consulted by Rules.py, which must not reach for a location this mode
+    # never created.
+    PSYCHO_EXCLUDED_LOCATIONS = PSYCHO_EXCLUDED_LOCATIONS
+    SPITTER_EXCLUDED_LOCATIONS = SPITTER_EXCLUDED_LOCATIONS
+
+    # All "Kill <name>" survivor locations, for the Psycho goal's access rule
+    # and its milestones. Taken from the KILL_SURVIVOR category rather than a
+    # name prefix -- "Kill Adam", "Kill 1000 zombies" and the rest share it.
+    ALL_KILL_LOCATIONS = [
+        loc.name
+        for region_locs in location_tables.values()
+        for loc in region_locs
+        if loc.category == DRLocationCategory.KILL_SURVIVOR
+        and not re.fullmatch(r"Kill \d+ survivors", loc.name)
+    ]
 
     # All "Rescue <name>" location names. Used by the Savior goal's access
     # rule and by the "Rescue N survivors" milestones to count reachable
@@ -492,6 +718,8 @@ class DRWorld(World):
     GOAL_ONLY_EVENT_LOCATIONS = {
         "Ending S: Beat up Brock with your bare fists!",
         "Savior: Rescue enough survivors to escape",
+        "Zombie Genocider: Kill 53,594 zombies across the mall",
+        "Psycho: Kill enough survivors to escape",
     }
 
     # MAIN_SCOOP-category locations that fire automatically during the forced
@@ -512,6 +740,17 @@ class DRWorld(World):
         for location in location_table:
             # Skip time-wait locations when ScoopSanity is enabled (time is frozen)
             if self.options.scoop_sanity and location.name in SCOOP_SANITY_EXCLUDED_LOCATIONS:
+                continue
+
+            # Psycho drops everything that needs a survivor alive and willing.
+            # The rescue milestones are CHALLENGE, so dropping the SURVIVOR
+            # category does not take them with it, and the escort challenges
+            # cannot be done at all once survivors turn hostile.
+            if self.psycho_mode and location.name in PSYCHO_EXCLUDED_LOCATIONS:
+                continue
+
+            # Spitting cannot fire a gun or bowl a strike.
+            if self.spitter_only and location.name in SPITTER_EXCLUDED_LOCATIONS:
                 continue
 
             # Skip goal-only EVENT locations that aren't the active goal.
@@ -536,6 +775,12 @@ class DRWorld(World):
                 # created this seed (set populated in __init__ above).
                 if (location.category == DRLocationCategory.PP_BONUS
                         and location.name in self._pp_bonus_excluded_names):
+                    continue
+                if (location.category == DRLocationCategory.ZOMBIE_KILL
+                        and location.name in self._zombie_kill_excluded_names):
+                    continue
+                if (location.category == DRLocationCategory.KILL_SANITY
+                        and location.name in self._kill_sanity_excluded_names):
                     continue
                 new_location = DRLocation(
                     self.player,
@@ -577,12 +822,24 @@ class DRWorld(World):
         self.multiworld.regions.append(new_region)
         return new_region
 
+    # KillSanity fill: the share of kill locations that get their filler
+    # placed straight back onto them (pre_fill) rather than through the
+    # multiworld. Tunic's grass keeps 95% home for the same reason.
+    KILL_FILLER_LOCAL_PERCENT = 95
+
     def create_items(self):
         itempool: List[DRItem] = []
         itempoolSize = 0
+        kill_slots = 0
         goal_location_name = self.GOAL_LOCATIONS[self.options.goal.value]
 
         for location in self.multiworld.get_locations(self.player):
+                # KillSanity slots get their own filler, counted apart so the
+                # trap percentage and the ordinary filler ratios stay what
+                # they are without the option.
+                if location.category == DRLocationCategory.KILL_SANITY:
+                    kill_slots += 1
+                    continue
                 item_data = item_dictionary[location.default_item_name]
                 if item_data.category in [DRItemCategory.SKIP] or \
                         location.category in [DRLocationCategory.EVENT]:
@@ -615,6 +872,19 @@ class DRWorld(World):
         for item in foo:
             itempool.append(self.create_item(item.name))
 
+        # KillSanity filler: most goes home in pre_fill, the rest joins the
+        # multiworld pool. Round-robin over the three names so the spoiler
+        # reads evenly.
+        self.kill_filler_local = kill_slots * self.KILL_FILLER_LOCAL_PERCENT // 100
+        # The local share is held back for stage_pre_fill; the rest joins the
+        # multiworld pool.
+        self.kill_fill_items = [
+            self.create_item(kill_filler_items[i % len(kill_filler_items)])
+            for i in range(self.kill_filler_local)
+        ]
+        for i in range(kill_slots - self.kill_filler_local):
+            itempool.append(self.create_item(kill_filler_items[i % len(kill_filler_items)]))
+
         self.multiworld.itempool += itempool
 
 
@@ -633,6 +903,16 @@ class DRWorld(World):
             item_classification = ItemClassification.progression
         elif name == "Queen" and self.options.scoop_sanity:
             # Gates queen spawning, so state.has must be able to see it.
+            item_classification = ItemClassification.progression
+        elif name in ("Mega Buster", "Fire Extinguisher"):
+            # The RPG rule asks whether each blender ingredient is obtainable
+            # in every mode -- "sent it OR can walk to it" without Restricted,
+            # both with it -- so state.has must see them either way.
+            item_classification = ItemClassification.progression
+        elif name == "Book [Blender]":
+            # Both routes to "Kill 100 zombies with an RPG" go through it, and
+            # on goals without Overtime it is the only route, so state.has
+            # must see it in every mode.
             item_classification = ItemClassification.progression
         elif name in microwave_food_items and self.options.pp_bonus_locations:
             # Food items bypass the Seon's requirement in the microwave
@@ -686,6 +966,56 @@ class DRWorld(World):
         if self.options.scoop_sanity and self.scoop_order:
             self.multiworld.early_items[self.player][self.scoop_order[0]] = 1
 
+        # KillSanity: pick this world's kill slots for the local share. The
+        # placing happens in stage_pre_fill, pooled across every Dead Rising
+        # world in the seed, the way Tunic pools its grass.
+        self.kill_fill_locations = []
+        self.kill_backup_locations = []
+        local = getattr(self, "kill_filler_local", 0)
+        if local > 0:
+            slots = [loc for loc in self.multiworld.get_unfilled_locations(self.player)
+                     if loc.category == DRLocationCategory.KILL_SANITY]
+            self.random.shuffle(slots)
+            self.kill_fill_locations = slots[:local]
+            self.kill_backup_locations = slots[local:]
+
+    @classmethod
+    def stage_pre_fill(cls, multiworld: MultiWorld) -> None:
+        """Place every Dead Rising world's local kill filler across every
+        Dead Rising world's kill slots, pooled and shuffled together. One
+        Frank's Brains can sit on another Frank's kill and come home when it
+        is checked; the fill never handles any of it."""
+        worlds = [w for w in multiworld.get_game_worlds("Dead Rising Deluxe Remaster")
+                  if getattr(w, "kill_fill_items", None)]
+        if not worlds:
+            return
+        items, slots, backup = [], [], []
+        for w in worlds:
+            items.extend(w.kill_fill_items)
+            slots.extend(w.kill_fill_locations)
+            backup.extend(w.kill_backup_locations)
+        multiworld.random.shuffle(items)
+        multiworld.random.shuffle(slots)
+        multiworld.random.shuffle(backup)
+        for item in items:
+            placed = False
+            while slots and not placed:
+                loc = slots.pop()
+                if not loc.item:
+                    loc.place_locked_item(item)
+                    placed = True
+            # Another world filled this slot during its pre_fill: use a
+            # spare kill slot instead.
+            while backup and not placed:
+                loc = backup.pop()
+                if not loc.item:
+                    loc.place_locked_item(item)
+                    placed = True
+            if not placed:
+                raise OptionError(
+                    "Dead Rising Deluxe Remaster: ran out of kill slots for the "
+                    "local kill filler; another world filled them during pre_fill.")
+
     def set_rules(self) -> None:
         Rules.set_rules(self)
 
@@ -720,8 +1050,8 @@ class DRWorld(World):
         return {code: sorted(targets) for code, targets in sorted(graph.items()) if targets}
 
     def _door_locks_anchors(self) -> Dict[str, List[Dict[str, Any]]]:
-        """{scene_code: [{x, z, vanilla, to}]} -- where each door stands on the
-        side the player walks up to, and where it now leads.
+        """{scene_code: [{x, y, z, vanilla, to}]} -- where each door stands on
+        the side the player walks up to, and where it now leads.
 
         Door Locks disables a locked door's hit data, so the game shows no
         prompt and the overlay that names the real destination never fires --
@@ -750,6 +1080,9 @@ class DRWorld(World):
             actual = (redirect or {}).get("target_area") or vanilla
             out.setdefault(src, []).append({
                 "x": round(position["x"], 2),
+                # Height too: the hint used to fire from a balcony over the
+                # door, eight metres out on the plane and a floor up.
+                "y": round(position.get("y", 0.0), 2),
                 "z": round(position["z"], 2),
                 "vanilla": AREA_NAMES.get(vanilla, vanilla),
                 "to": AREA_NAMES.get(actual, actual),
@@ -803,16 +1136,30 @@ class DRWorld(World):
                 else:
                     locations_target.append(0)
 
-        goal = self.options.goal.value  # 0 = Ending S, 1 = Ending A, 2 = Savior
+        # 0 Ending S, 1 Ending A, 2 Savior, 3 Zombie Genocider, 4 Psycho
+        goal = self.options.goal.value
         number_of_survivors = self.options.number_of_survivors.value
+        number_of_kills = self.options.number_of_kills.value
         death_link_enabled = bool(self.options.death_link.value)
+        damage_link_enabled = bool(self.options.damage_link.value)
+        damage_link_group = str(self.options.damage_link_group.value or "")
+        knockback_link_enabled = bool(self.options.knockback_link.value)
         restricted_item_mode_enabled = bool(self.options.restricted_item_mode.value)
         door_randomizer_enabled = bool(self.options.door_randomizer.value)
         door_randomizer_mode = self.options.door_randomizer_mode.value
         scoop_sanity_enabled = bool(self.options.scoop_sanity.value)
-        exclude_levels_enabled = bool(self.options.exclude_levels.value)
-        exclude_rescues_enabled = bool(self.options.exclude_rescues.value)
+        # Derived from the sliders now: their maxima mean "exclude nothing".
+        exclude_levels_enabled = self.options.exclude_levels_above.value < 50
+        exclude_rescues_enabled = self.options.exclude_rescues_above.value < 48
+        # Per-region thresholds the Lua tracker sends checks at. Regions
+        # with none at this tier are left out entirely.
+        zombie_kill_thresholds = {
+            region: list(tiers[self.zombie_kill_tier])
+            for region, tiers in ZOMBIE_KILL_TIERS.items()
+            if tiers[self.zombie_kill_tier]
+        }
         pp_stickers_filler_enabled = bool(self.options.pp_stickers_filler.value)
+        overtime_checks_filler_enabled = bool(self.options.overtime_checks_filler.value)
 
         # Player-stats / progression options (PlayerStats + PlayerBuffs +
         # HostileSurvivorTrap on the Lua side read these from slot_data).
@@ -829,7 +1176,6 @@ class DRWorld(World):
         cult_limited_enabled = bool(self.options.cult_limited.value)
         split_keys_enabled = bool(self.options.split_keys.value)
         any_order_enabled = bool(self.options.main_scoops_any_order.value)
-        survivor_respawn_enabled = bool(self.options.survivor_respawn.value)
         overtime_gating_enabled = bool(
             self.options.overtime_progression_gating.value)
         # Hardcore implies Night — auto-enable Night when Hardcore is on so
@@ -838,6 +1184,9 @@ class DRWorld(World):
         hardcore_zombies_enabled = bool(self.options.hardcore_zombies_enabled.value)
         if hardcore_zombies_enabled:
             night_mode_enabled = True
+        # 1 is vanilla; the Lua side clamps to the same maximum.
+        zombie_spawn_multiplier = int(self.options.zombie_spawn_multiplier.value)
+        car_keys_enabled = bool(self.options.car_keys.value)
 
         # Costume randomizer toggles. Body-first randomization rule (DLC
         # anchor overrides accessories, regular Body co-randomizes
@@ -878,19 +1227,43 @@ class DRWorld(World):
                     # Per-count names: index N-1 -> name for count N
                     _max = int(_entry.get("max_count", 0))
                     # The first _max items in _names are the per-count names
-                    _d["count_names"] = _names[:_max]
+                    # Instance entries have no counted names any more, so
+                    # there is nothing for Lua to fall back to -- and sending
+                    # one would name a location this seed does not have.
+                    _d["count_names"] = ([] if _entry.get("instances")
+                                         else _names[:_max])
+                    # The all-X name goes through whenever it is set: Lua
+                    # sends every instance once the all-X is out, whether the
+                    # game announced it (all_msg_no) or a challenge counter did.
                     if _entry.get("all_msg_no") is not None:
-                        _d["all_msg_no"]      = _entry["all_msg_no"]
-                        _d["all_location_name"] = _entry.get("all_location_name")
+                        _d["all_msg_no"] = _entry["all_msg_no"]
+                    if _entry.get("all_location_name"):
+                        _d["all_location_name"] = _entry["all_location_name"]
+                    # Per-object positions, so Lua can name the one that was
+                    # actually used rather than counting. Passed through as-is;
+                    # the Lua side decides how to match on them.
+                    if _entry.get("instances"):
+                        _d["instances"] = _entry["instances"]
+                        _d["match"]     = _entry.get("match", "nearest")
+                        for _k in ("om_type", "method", "state_field",
+                                   "state_enum", "state_from"):
+                            if _entry.get(_k):
+                                _d[_k] = _entry[_k]
                 pp_bonus_trigger_data.append(_d)
 
         slot_data = {
             "options": {
                 "goal": goal,
                 "number_of_survivors": number_of_survivors,
+                "number_of_kills": number_of_kills,
+                "psycho_mode": self.psycho_mode,
                 "guaranteed_items": self.options.guaranteed_items.value,
                 "death_link": death_link_enabled,
+                "damage_link": damage_link_enabled,
+                "damage_link_group": damage_link_group,
+                "knockback_link": knockback_link_enabled,
                 "restricted_item_mode": restricted_item_mode_enabled,
+                "spitter_only": self.spitter_only,
                 "door_randomizer": door_randomizer_enabled,
                 "door_randomizer_mode": door_randomizer_mode,
                 "scoop_sanity": scoop_sanity_enabled,
@@ -898,6 +1271,14 @@ class DRWorld(World):
                 "exclude_levels_above": self.options.exclude_levels_above.value,
                 "exclude_rescues": exclude_rescues_enabled,
                 "exclude_rescues_above": self.options.exclude_rescues_above.value,
+                "zombie_kill_tiers": self.zombie_kill_tier,
+                # ScoopSanity only. item mode rides on a scoop item, which
+                # only enters the pool under ScoopSanity, and the soldiers are
+                # a scoop-shaped feature either way -- so the whole option
+                # falls back to none without it.
+                "special_forces_mode": (
+                    self.options.special_forces_mode.value
+                    if self.options.scoop_sanity.value else 0),
                 "enable_skill_items": enable_skill_items,
                 "enable_stat_items": enable_stat_items,
                 "enable_extra_stat_buffs": enable_extra_stat_buffs,
@@ -908,29 +1289,38 @@ class DRWorld(World):
                 "cult_limited": cult_limited_enabled,
                 "split_keys": split_keys_enabled,
                 "main_scoops_any_order": any_order_enabled,
-                "survivor_respawn": survivor_respawn_enabled,
                 "overtime_progression_gating": overtime_gating_enabled,
                 "night_mode_enabled": night_mode_enabled,
                 "hardcore_zombies_enabled": hardcore_zombies_enabled,
+                "zombie_spawn_multiplier": zombie_spawn_multiplier,
+                "car_keys": car_keys_enabled,
                 "random_starting_costume": random_starting_costume,
                 "costume_chaos_mode": costume_chaos_mode,
                 "dlc_outfits_enabled": dlc_outfits_enabled,
                 "pp_bonus_locations": pp_bonus_locations_enabled,
                 "pp_stickers_filler": pp_stickers_filler_enabled,
+                "overtime_checks_filler": overtime_checks_filler_enabled,
             },
             "goal": goal,
             "number_of_survivors": number_of_survivors,
+            "number_of_kills": number_of_kills,
+            "psycho_mode": self.psycho_mode,
             "death_link": death_link_enabled,
+            "damage_link": damage_link_enabled,
+            "damage_link_group": damage_link_group,
+            "knockback_link": knockback_link_enabled,
             "restricted_item_mode": restricted_item_mode_enabled,
+            "spitter_only": self.spitter_only,
             "door_randomizer": door_randomizer_enabled,
             "door_randomizer_mode": door_randomizer_mode,  # For Lua: 0 = chaos, 1 = paired
             "door_redirects": self.door_redirects if door_randomizer_enabled else {},
             "door_locks": self.door_locks_active,
-            # Per-door positions so the overlay can name a destination the
-            # player cannot get a prompt for. Only needed under Door Locks.
-            "door_anchors": (
-                self._door_locks_anchors() if self.door_locks_active else {}
-            ),
+            # Per-door positions so the overlay can name a destination, and
+            # the key it wants, for a door the player cannot get a prompt for.
+            # A locked door raises no prompt in ANY key mode, not just Door
+            # Locks, so these are always sent -- with the randomizer off the
+            # builder simply reports each door's vanilla destination.
+            "door_anchors": self._door_locks_anchors(),
             # Where the doors actually lead. Only sent under Door Locks, where
             # the vanilla graph in shared data would answer the wrong question.
             "area_graph": (
@@ -942,9 +1332,17 @@ class DRWorld(World):
                 self._build_door_overlay_data() if door_randomizer_enabled else {}
             ),
             "scoop_sanity": scoop_sanity_enabled,
+            "special_forces_mode": (
+                self.options.special_forces_mode.value
+                if self.options.scoop_sanity.value else 0),
             "exclude_levels": exclude_levels_enabled,
             "exclude_rescues": exclude_rescues_enabled,
+            "zombie_kill_tier": self.zombie_kill_tier,
+            "kill_sanity": self.kill_sanity_tops,
+            "zombie_kill_thresholds": zombie_kill_thresholds,
             "scoop_order": self.scoop_order if scoop_sanity_enabled else {},
+            # The Kent day each Progressive Kent Scoop copy unlocks, in order.
+            "kent_progression": KENT_DAYS if scoop_sanity_enabled else [],
             # Player-stats slot data (read by Lua on slot connect)
             "vanilla_progression": vanilla_progression_value,
             "trap_percentage": trap_percentage,
@@ -953,10 +1351,11 @@ class DRWorld(World):
             "cult_limited": cult_limited_enabled,
             "split_keys": split_keys_enabled,
             "main_scoops_any_order": any_order_enabled,
-            "survivor_respawn": survivor_respawn_enabled,
             "overtime_progression_gating": overtime_gating_enabled,
             "night_mode_enabled": night_mode_enabled,
             "hardcore_zombies_enabled": hardcore_zombies_enabled,
+            "zombie_spawn_multiplier": zombie_spawn_multiplier,
+            "car_keys": car_keys_enabled,
             "random_starting_costume": random_starting_costume,
             "costume_chaos_mode": costume_chaos_mode,
             "dlc_outfits_enabled": dlc_outfits_enabled,

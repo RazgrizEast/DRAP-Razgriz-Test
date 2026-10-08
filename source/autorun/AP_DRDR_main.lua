@@ -35,11 +35,15 @@ AP.EventTracker     = require("DRAP/trackers/EventTracker")
 AP.NpcTracker       = require("DRAP/trackers/NpcTracker")
 AP.PPStickerTracker = require("DRAP/trackers/PPStickerTracker")
 AP.AchievementTracker = require("DRAP/trackers/AchievementTracker")
+AP.KillTracker      = require("DRAP/trackers/KillTracker")
 AP.SaveSlot         = require("DRAP/SaveSlot")
 AP.SaveDiagnostics  = require("DRAP/SaveDiagnostics")
+AP.SteamStore       = require("DRAP/SteamStore")
 AP.TimeGate         = require("DRAP/TimeGate")
 AP.Scene            = require("DRAP/Scene")
 AP.DeathLink        = require("DRAP/trackers/DeathLink")
+AP.DamageLink       = require("DRAP/trackers/DamageLink")
+AP.KnockbackLink    = require("DRAP/trackers/KnockbackLink")
 AP.ScoopUnlocker     = require("DRAP/ScoopUnlocker")
 AP.MissionTruth      = require("DRAP/effects/MissionTruth")
 AP.MissionTruth.init({ scoop_unlocker = AP.ScoopUnlocker })
@@ -127,20 +131,31 @@ AP.effects.TimeLockEffects            = require("DRAP/effects/TimeLockEffects")
 AP.effects.VictoryEffects             = require("DRAP/effects/VictoryEffects")
 AP.effects.SurvivorScoopCompletion    = require("DRAP/effects/SurvivorScoopCompletion")
 AP.effects.SaviorGoalEffects          = require("DRAP/effects/SaviorGoalEffects")
+AP.effects.EndingSequence             = require("DRAP/effects/EndingSequence")
+AP.effects.EscortVoice                = require("DRAP/effects/EscortVoice")
+AP.effects.PsychoGoalEffects          = require("DRAP/effects/PsychoGoalEffects")
+AP.effects.PsychoHostility            = require("DRAP/effects/PsychoHostility")
 AP.effects.BookSkills                 = require("DRAP/effects/BookSkills")
 AP.effects.BookGuards                 = require("DRAP/effects/BookGuards")
-AP.effects.NpcInfoSweeper             = require("DRAP/effects/NpcInfoSweeper")
 AP.effects.NpcSaveGuard               = require("DRAP/effects/NpcSaveGuard")
 AP.effects.ConvictRespawnTrap         = require("DRAP/effects/ConvictRespawnTrap")
+AP.effects.InventoryTraps             = require("DRAP/effects/InventoryTraps")
+AP.effects.CostumeTraps               = require("DRAP/effects/CostumeTraps")
+AP.effects.SpecialForces              = require("DRAP/effects/SpecialForces")
+AP.effects.SpitterMode                = require("DRAP/effects/SpitterMode")
 AP.TrapBank                           = require("DRAP/TrapBank")
-AP.effects.SurvivorRecovery           = require("DRAP/effects/SurvivorRecovery")
+AP.effects.KentChain                  = require("DRAP/effects/KentChain")
+AP.effects.CultZombieLayout           = require("DRAP/effects/CultZombieLayout")
 AP.effects.PartyHudGuard              = require("DRAP/effects/PartyHudGuard")
 AP.effects.PlayerStats                = require("DRAP/effects/PlayerStats")
 AP.effects.PlayerBuffs                = require("DRAP/effects/PlayerBuffs")
 AP.effects.HostileSurvivorTrap        = require("DRAP/effects/HostileSurvivorTrap")
 AP.effects.ZombieEffects              = require("DRAP/effects/ZombieEffects")
+AP.effects.VehicleGate                = require("DRAP/effects/VehicleGate")
+AP.effects.UnlockItemSpawns           = require("DRAP/effects/UnlockItemSpawns")
 AP.effects.CostumeRandomizer          = require("DRAP/effects/CostumeRandomizer")
 AP.effects.AP_LocationTriggers        = require("DRAP/effects/AP_LocationTriggers")
+AP.effects.PpBonusMatch               = require("DRAP/effects/PpBonusMatch")
 AP.effects.DoorPromptOverlay          = require("DRAP/effects/DoorPromptOverlay")
 AP.effects.OvertimeItemGate           = require("DRAP/effects/OvertimeItemGate")
 
@@ -150,13 +165,18 @@ AP.effects.TimeLockEffects.register_all()
 AP.effects.VictoryEffects.register_all()
 AP.effects.SurvivorScoopCompletion.register_all()
 AP.effects.SaviorGoalEffects.register_all()
+AP.effects.PsychoGoalEffects.register_all()
 AP.effects.BookSkills.register_all()
 AP.effects.BookGuards.register_all()
 AP.effects.PlayerStats.register()
 AP.effects.PlayerBuffs.register()
 AP.effects.HostileSurvivorTrap.register()
 AP.effects.ConvictRespawnTrap.register()
+AP.effects.InventoryTraps.register()
+AP.effects.CostumeTraps.register()
 AP.effects.ZombieEffects.register()
+AP.effects.VehicleGate.register()
+AP.effects.UnlockItemSpawns.register()
 AP.effects.CostumeRandomizer.register()
 AP.effects.AP_LocationTriggers.register()
 AP.effects.DoorPromptOverlay.register()
@@ -198,12 +218,6 @@ AP.EventTracker.on_tracked_location = function(desc, source, raw_id, extra)
     log(string.format("Tracked location: %s", tostring(desc)))
     AP.AP_BRIDGE.check(desc)
 
-    -- Cutscene-staged survivors wait on their scoop's cutscene rather
-    -- than on a sibling being alive, so tell SurvivorRecovery it ran.
-    if AP.effects.SurvivorRecovery.note_tracked_location then
-        pcall(AP.effects.SurvivorRecovery.note_tracked_location, desc)
-    end
-
     -- Forward events to ScoopUnlocker for milestone/chain tracking
     if AP.ScoopUnlocker and AP.ScoopUnlocker.on_event_tracked then
         pcall(AP.ScoopUnlocker.on_event_tracked, desc)
@@ -218,11 +232,36 @@ AP.ChallengeTracker.on_challenge_threshold = function(field_name, def, idx, targ
     local loc_name = threshold_id or string.format("%s_%d", field_name, target or -1)
     log(string.format("Challenge reached [%s] target #%d: %d", tostring(loc_name), idx or -1, target or -1))
     AP_BRIDGE.check(loc_name)
+    -- An all-X counter (the Food Court plates) covers per-object checks too.
+    if AP.effects.PpBonusMatch and AP.effects.PpBonusMatch.on_all_sent then
+        pcall(AP.effects.PpBonusMatch.on_all_sent, loc_name)
+    end
 end
 
 ------------------------------------------------------------
 -- Hook Wiring: Survivor Tracker
 ------------------------------------------------------------
+
+-- Psycho Mode: only kills the player landed count, so this fires from the
+-- damage-attribution poll rather than from a death.
+AP.NpcTracker.on_survivor_killed_by_player = function(npc_id, friendly_name)
+    if not AP.PsychoMode then return end
+    -- The tracker reports every player kill. Only the 48 targets count: the
+    -- Hostile NPC Trap's spawns and the story NPCs are not checks, and must
+    -- not send one.
+    if not (AP.effects.PsychoGoalEffects
+            and AP.effects.PsychoGoalEffects.is_target(friendly_name)) then
+        return
+    end
+    log(string.format("Survivor killed: %s", tostring(friendly_name)))
+    AP_BRIDGE.check(string.format("Kill %s", friendly_name))
+    if AP.effects.PsychoGoalEffects then
+        AP.effects.PsychoGoalEffects.on_survivor_killed(friendly_name)
+    end
+    if AP.ScoopUnlocker and AP.ScoopUnlocker.on_survivor_killed then
+        AP.ScoopUnlocker.on_survivor_killed(friendly_name)
+    end
+end
 
 AP.NpcTracker.on_survivor_rescued = function(npc_id, state_index, friendly_name, game_id)
     log(string.format("Survivor rescued: %s", tostring(friendly_name)))
@@ -232,6 +271,12 @@ AP.NpcTracker.on_survivor_rescued = function(npc_id, state_index, friendly_name,
     end
     if AP.effects.SaviorGoalEffects then
         AP.effects.SaviorGoalEffects.on_survivor_rescued(friendly_name)
+    end
+    -- Delivered through a redirected door the engine stays silent, so this
+    -- speaks the line it skips. Takes npc_id: the line is named for the
+    -- SurvivorType, not the friendly name.
+    if AP.effects.EscortVoice then
+        AP.effects.EscortVoice.on_survivor_rescued(npc_id)
     end
 end
 
@@ -332,11 +377,8 @@ local function run_slot_connect(slot_data)
     AP_BRIDGE.load_completed_checks()
     AP_BRIDGE.resend_all_checks()
 
-    -- Survivor observation history. Must follow load_completed_checks, which
-    -- is what initializes the ledger this reads its section from. Without it a
-    -- survivor killed in an earlier session looks like a broken spawn.
-    AP.effects.SurvivorRecovery.load_census()
-    -- Trap payout tallies, same ledger, same moment.
+    -- Trap payout tallies live in the ledger, so this must follow
+    -- load_completed_checks, which initializes it.
     AP.TrapBank.load()
 
     -- Set up sticker save file
@@ -361,6 +403,51 @@ local function run_slot_connect(slot_data)
         AP.ItemSpawner.set_spawning_disabled(true)
         log("Item spawning disabled due to hard mode")
     end
+
+    -- DamageLink. The tag went on at ConnectUpdate; this arms the detection
+    -- and the receiving end.
+    local damage_link_enabled = (type(slot_data) == "table" and slot_data.damage_link == true)
+    AP.DamageLinkEnabled = damage_link_enabled
+    -- The group has to be set BEFORE the link is armed: the tag it produces is
+    -- what both the send and the receive side match on.
+    AP_BRIDGE.set_damagelink_group(
+        type(slot_data) == "table" and slot_data.damage_link_group or "")
+    AP.DamageLink.set_enabled(damage_link_enabled)
+    AP_BRIDGE.set_damagelink_enabled(damage_link_enabled)
+    AP_BRIDGE.on_shared_damage = function(points, source)
+        AP.DamageLink.apply_received(points, source)
+    end
+    log("DamageLink enabled=" .. tostring(damage_link_enabled))
+    -- /damagelink in the client window flips the tag; this flips the rest.
+    AP_BRIDGE.AP_REF.on_damage_link_toggled = function(on)
+        AP.DamageLinkEnabled = on
+        AP.DamageLink.set_enabled(on)
+        AP_BRIDGE.set_damagelink_enabled(on)
+        log("DamageLink " .. (on and "on" or "off") .. " (client command)")
+    end
+
+    -- KnockbackLink. Shares being knocked about rather than being hurt, so
+    -- it stands on its own next to DamageLink.
+    local knockback_link_enabled = (type(slot_data) == "table" and slot_data.knockback_link == true)
+    AP.KnockbackLinkEnabled = knockback_link_enabled
+    AP.KnockbackLink.set_enabled(knockback_link_enabled)
+    AP_BRIDGE.set_knockbacklink_enabled(knockback_link_enabled)
+    AP_BRIDGE.on_knockback = function(value, source)
+        AP.KnockbackLink.apply_received(value, source)
+    end
+    log("KnockbackLink enabled=" .. tostring(knockback_link_enabled))
+
+    -- Spitter Only. Arrives with restricted_item_mode already forced on by
+    -- the apworld, so the pickup half above is what stops the player picking
+    -- a weapon up; this is the melee floor and the permanent Spitfire.
+    local spitter_only_enabled = (type(slot_data) == "table" and slot_data.spitter_only == true)
+    AP.SpitterOnlyEnabled = spitter_only_enabled
+    AP.effects.SpitterMode.set_enabled(spitter_only_enabled)
+    -- The Special Forces scoop cannot be completed by spit; trim its
+    -- helicopter requirement so the soldiers still leave.
+    AP.ScoopUnlocker.set_spitter_only_enabled(spitter_only_enabled)
+    AP.ScoopUnlocker.set_kent_progression(type(slot_data) == "table" and slot_data.kent_progression or nil)
+    log("Spitter Only enabled=" .. tostring(spitter_only_enabled))
 
     -- Door Randomizer option
     local door_randomizer_enabled = (type(slot_data) == "table" and slot_data.door_randomizer == true)
@@ -413,7 +500,8 @@ local function run_slot_connect(slot_data)
     -- Goal option
     local goal = (type(slot_data) == "table" and slot_data.goal) or 0
     AP.Goal = goal
-    local goal_names = { [0] = "Ending S", [1] = "Ending A", [2] = "Savior" }
+    local goal_names = { [0] = "Ending S", [1] = "Ending A", [2] = "Savior",
+                         [3] = "Zombie Genocider", [4] = "Psycho" }
     log("Goal: " .. (goal_names[goal] or tostring(goal)))
 
     -- Overtime suppressant gating. Ending S only, because that is the only
@@ -435,36 +523,51 @@ local function run_slot_connect(slot_data)
         log("Savior target: " .. tostring(AP.NumberOfSurvivors) .. " survivors")
     end
 
+    -- Number of kills (only meaningful when goal == 4, Psycho)
+    AP.NumberOfKills = (type(slot_data) == "table" and tonumber(slot_data.number_of_kills)) or 25
+    AP.PsychoMode = goal == 4
+    if AP.PsychoMode then
+        log("Psycho target: " .. tostring(AP.NumberOfKills) .. " kills")
+    end
+    AP.ScoopUnlocker.set_psycho_mode(AP.PsychoMode)
+
     -- ScoopSanity option
     local scoop_sanity_enabled = (type(slot_data) == "table" and slot_data.scoop_sanity == true)
+    -- Seeds up to 1.2.0 wrote special_forces_mode only inside slot_data.options.
+    local sf_mode = 0
+    if type(slot_data) == "table" then
+        sf_mode = tonumber(slot_data.special_forces_mode)
+            or (type(slot_data.options) == "table" and tonumber(slot_data.options.special_forces_mode))
+            or 0
+    end
+    AP.effects.SpecialForces.set_mode(sf_mode)
     AP.ScoopSanityEnabled = scoop_sanity_enabled
     AP.ScoopUnlocker.set_scoop_sanity_enabled(scoop_sanity_enabled)
     log("ScoopSanity enabled=" .. tostring(scoop_sanity_enabled))
+
+    -- Zombie Kill Tiers. Thresholds arrive per region; an empty table (or
+    -- an older seed with no key) leaves the tracker dormant and unhooked.
+    local kill_thresholds = (type(slot_data) == "table"
+        and type(slot_data.zombie_kill_thresholds) == "table"
+        and slot_data.zombie_kill_thresholds) or {}
+    -- KillSanity: per-region caps, every kill up to the cap is a location.
+    local kill_caps = (type(slot_data) == "table"
+        and type(slot_data.kill_sanity) == "table"
+        and slot_data.kill_sanity) or {}
+    AP.KillTracker.configure(kill_thresholds, kill_caps)
+    log("Zombie Kill Tiers: " .. tostring((type(slot_data) == "table"
+        and slot_data.zombie_kill_tier) or "none"))
+    if next(kill_caps) then
+        local total = 0
+        for _, cap in pairs(kill_caps) do total = total + (tonumber(cap) or 0) end
+        log(string.format("KillSanity: %d kill location(s) across the areas", total))
+    end
 
     -- Cult Limited option
     local cult_limited_enabled = (type(slot_data) == "table" and slot_data.cult_limited == true)
     AP.CultLimitedEnabled = cult_limited_enabled
     AP.ScoopUnlocker.set_cult_limited_enabled(cult_limited_enabled)
     log("Cult Limited enabled=" .. tostring(cult_limited_enabled))
-
-    -- Survivor Respawn option. Defaults ON in the apworld, so treat a missing
-    -- key (older seed) as enabled rather than silently reverting to the
-    -- vanilla rule where a dead survivor loses their check for good.
-    local survivor_respawn_enabled = not (type(slot_data) == "table"
-        and slot_data.survivor_respawn == false)
-    AP.SurvivorRespawnEnabled = survivor_respawn_enabled
-    AP.effects.SurvivorRecovery.set_survivor_respawn_enabled(survivor_respawn_enabled)
-    -- The option only does anything while the repair paths are live, and they
-    -- ship disabled. A bare "enabled=true" in a field log reads as "respawns
-    -- are happening" and would send the next investigation the wrong way.
-    local respawn_note = ""
-    if survivor_respawn_enabled
-        and AP.effects.SurvivorRecovery.is_repair_enabled
-        and not AP.effects.SurvivorRecovery.is_repair_enabled() then
-        respawn_note = " (inert -- survivor repair is disabled in this build)"
-    end
-    log("Survivor Respawn enabled=" .. tostring(survivor_respawn_enabled)
-        .. respawn_note)
 
     -- Goal mode for ScoopUnlocker -- used to fire flag 270 (Backup for Brad
     -- cutscene that opens EP shutters) on Meet-Jessie when goal is Savior.
@@ -502,8 +605,30 @@ local function run_slot_connect(slot_data)
         else
             AP.effects.ZombieEffects.set_permanent_hardcore(false)
         end
-        log(string.format("Zombie difficulty: night=%s hardcore=%s",
-            tostring(night_enabled), tostring(hardcore_enabled)))
+        -- Spawn multiplier is independent of the two flags: it scales how many
+        -- zombies each area asks for, rather than how they behave.
+        local spawn_mult = (type(slot_data) == "table"
+                            and tonumber(slot_data.zombie_spawn_multiplier)) or 1
+        AP.effects.ZombieEffects.set_spawn_multiplier(spawn_mult)
+
+        -- Night lighting rides Night Mode but only under ScoopSanity: without
+        -- it the clock runs and the game cycles to night on its own. Opens
+        -- after Meet Jessie, polled module-side.
+        AP.effects.ZombieEffects.set_night_lighting(night_enabled,
+            scoop_sanity_enabled)
+
+        log(string.format("Zombie difficulty: night=%s hardcore=%s spawn=%sx "
+            .. "lighting=%s", tostring(night_enabled),
+            tostring(hardcore_enabled), tostring(spawn_mult),
+            tostring(night_enabled and scoop_sanity_enabled)))
+    end
+
+    -- Car Keys: the drivable vehicles wait on their key. Independent of
+    -- Restricted Item Mode, and the Humvee is not part of it -- that stays
+    -- with OvertimeItemGate.
+    if AP.effects.VehicleGate then
+        AP.effects.VehicleGate.set_enabled(
+            type(slot_data) == "table" and slot_data.car_keys == true)
     end
 
     -- Costume randomizer toggles (3 independent options):
@@ -533,6 +658,9 @@ local function run_slot_connect(slot_data)
     if AP.effects.AP_LocationTriggers then
         local trigger_data = (type(slot_data) == "table"
                               and slot_data.pp_bonus_trigger_data) or {}
+        if AP.effects.PpBonusMatch then
+            AP.effects.PpBonusMatch.setup(trigger_data, AP_BRIDGE)
+        end
         AP.effects.AP_LocationTriggers.setup(trigger_data, AP_BRIDGE)
         log(string.format("PP-bonus location triggers: %d entries",
             type(trigger_data) == "table" and #trigger_data or 0))
@@ -626,6 +754,7 @@ local function try_reapply_if_ready()
             if ng then
                 log("New game detected -- resetting side scoop progress")
                 AP.ScoopUnlocker.reset_for_new_game()
+                AP.EventTracker.reset_sent()
             end
         else
             return  -- retry next frame; don't reapply against unsettled flags
@@ -640,7 +769,9 @@ local function try_reapply_if_ready()
     AP.effects.TimeLockEffects.reapply()
     AP.effects.SurvivorScoopCompletion.reapply()
     AP.effects.SaviorGoalEffects.reapply()
+    AP.effects.PsychoGoalEffects.reapply()
     AP.effects.BookSkills.reapply()
+    AP.effects.UnlockItemSpawns.reapply()
     -- After the grants, so the player's per-book off switches apply to the
     -- books this run just restored. Resets first, so a previous slot's
     -- choices cannot leak into this one.
@@ -706,6 +837,11 @@ re.on_frame(function()
     safe_on_frame(AP.DoorSceneLock,    "DoorSceneLock")
     safe_on_frame(AP.DoorRandomizer,   "DoorRandomizer")
     safe_on_frame(AP.NpcCarryover,     "NpcCarryover")
+    safe_on_frame(AP.effects.EscortVoice, "EscortVoice")
+    safe_on_frame(AP.effects.EndingSequence, "EndingSequence")
+    safe_on_frame(AP.effects.SpitterMode, "SpitterMode")
+    safe_on_frame(AP.DamageLink,       "DamageLink")
+    safe_on_frame(AP.KnockbackLink,    "KnockbackLink")
     safe_on_frame(AP.ChallengeTracker, "ChallengeTracker")
     safe_on_frame(AP.LevelTracker,     "LevelTracker")
     safe_on_frame(AP.AchievementTracker, "AchievementTracker")
@@ -718,10 +854,16 @@ re.on_frame(function()
     safe_on_frame(AP.SaveSlot,         "SaveSlot")
     safe_on_frame(AP.SaveDiagnostics,  "SaveDiagnostics")
     safe_on_frame(AP.effects.BookGuards, "BookGuards")
-    safe_on_frame(AP.effects.NpcInfoSweeper, "NpcInfoSweeper")
     safe_on_frame(AP.effects.NpcSaveGuard, "NpcSaveGuard")
     safe_on_frame(AP.TrapBank, "TrapBank")
-    safe_on_frame(AP.effects.SurvivorRecovery, "SurvivorRecovery")
+    safe_on_frame(AP.effects.InventoryTraps, "InventoryTraps")
+    safe_on_frame(AP.effects.KentChain, "KentChain")
+    safe_on_frame(AP.effects.CultZombieLayout, "CultZombieLayout")
+    safe_on_frame(AP.effects.PsychoHostility, "PsychoHostility")
+    safe_on_frame(AP.effects.SpecialForces, "SpecialForces")
+    -- Re-arms the spawn multiplier when a new area's layout appears; the
+    -- instantinateZombies pre-hook fires too early to catch it.
+    safe_on_frame(AP.effects.ZombieEffects, "ZombieEffects")
     safe_on_frame(AP.effects.PartyHudGuard, "PartyHudGuard")
 
     -- Debug modules

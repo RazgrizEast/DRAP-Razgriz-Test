@@ -180,10 +180,11 @@ function M.on_frame()
         if not hook_installed then return end
     end
     if not M:should_run() then return end
-    if not Shared.is_in_game() then
-        guard_active = false
-        return
-    end
+    -- guard_active is deliberately kept across a load: the crash is on the
+    -- first HUD update after a transition, and dropping the guard here would
+    -- leave that update unguarded until the next refresh. A stale "on" is
+    -- harmless -- hide_excess re-reads the party and hides nothing if it fits.
+    if not Shared.is_in_game() then return end
 
     local stranded = collect_stranded()
     stranded_count = stranded and #stranded or 0

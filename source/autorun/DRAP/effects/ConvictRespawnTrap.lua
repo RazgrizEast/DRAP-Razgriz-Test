@@ -28,6 +28,11 @@ local SCOOP_NAME = "The Convicts"
 
 local FLAG_DAY1 = 445      -- SET_PRISONER_1DAY -- "this encounter is spent"
 local FLAG_PRISONER_DIE = 1299
+-- Each prisoner also keeps his own death record (EV_700_PRISONER01/02_DIE,
+-- the 700 being Leisure Park). Left set, the respawn placed two of them as
+-- corpses (tester report).
+local FLAG_PRISONER01_DIE = 3332
+local FLAG_PRISONER02_DIE = 3333
 
 ------------------------------------------------------------
 -- Flags
@@ -60,6 +65,11 @@ end
 
 --- Declines by returning false, which costs nothing and leaves it banked.
 local function try_respawn()
+    -- Overtime is the game's; the trap stays banked.
+    local State = package.loaded["DRAP/scoops/ScoopState"]
+    if State and State.is_endgame_reached and State.is_endgame_reached() then
+        return false
+    end
     if not scoop_received() then return false end
 
     -- 445 off means they are already out there.
@@ -77,6 +87,9 @@ local function try_respawn()
     end
     -- Gates nothing, but leaving it set while they are alive reads as a lie.
     flag_off(FLAG_PRISONER_DIE)
+    -- These two do gate: a prisoner whose own record says dead comes back dead.
+    flag_off(FLAG_PRISONER01_DIE)
+    flag_off(FLAG_PRISONER02_DIE)
 
     M.log("convicts respawn armed -- they return on the next entry to Leisure Park")
     local Notify = package.loaded["DRAP/Notify"] or require("DRAP/Notify")
@@ -113,7 +126,12 @@ _G.drap_convict_trap_fire = function()
     if try_respawn() then
         M.log("armed by hand -- nothing was deducted from the bank")
     else
-        M.log("declined: need the scoop received and 445 on")
+        local State = package.loaded["DRAP/scoops/ScoopState"]
+        if State and State.is_endgame_reached and State.is_endgame_reached() then
+            M.log("declined: Overtime -- the trap stays banked until a 72-hour save is loaded")
+        else
+            M.log("declined: need the scoop received and 445 on")
+        end
     end
 end
 

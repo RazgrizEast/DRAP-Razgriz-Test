@@ -42,6 +42,12 @@ local endgame_reached = false
 -- Poll-class parking: { [name] = "flag_prereq" | "item" }
 local poll_deferred = {}
 
+-- AP receipt order: name -> ordinal of FIRST receipt. Conflict-group
+-- ADVANCE follows this rather than the group's list order, so a chain like
+-- Kent's plays its pending days in the order the multiworld granted them.
+local ap_receipt_seq = {}
+local ap_receipt_counter = 0
+
 ------------------------------------------------------------
 -- Config (data + injected adapters)
 ------------------------------------------------------------
@@ -67,6 +73,16 @@ local cfg = {
     now = function() return 0 end,
     check_flag = function(_) return nil end,   -- true/false/nil(unreadable)
     has_item = function(_) return false end,
+    scoop_survivors = {},      -- name -> { survivor stypes the scoop is about }
+    -- Observed alive->dead only. Deliberately NOT the census KILLED verdict:
+    -- that has a half-initialised branch, and a survivor wrongly called dead
+    -- loses their mission box with no way back.
+    survivor_dead = function(_) return false end,
+    -- Psycho Mode: the objective inverts. Only a kill the PLAYER landed
+    -- resolves a scoop; a rescue or a death by anything else fails it.
+    psycho_mode = false,
+    survivor_killed_by_player = function(_) return false end,
+    survivor_rescued = function(_) return false end,
     on_unlock = function(_, _) end,            -- engine flag writes
     on_state_changed = function() end,         -- persistence trigger
 }
@@ -107,6 +123,9 @@ end
 
 function M.data(name) return cfg.scoop_data[name] end
 
+function M.set_psycho_mode(on) cfg.psycho_mode = on == true end
+function M.is_psycho_mode() return cfg.psycho_mode == true end
+
 function M.is_activated() return ap_activated end
 function M.is_time_frozen() return time_frozen end
 function M.is_endgame_reached() return endgame_reached end
@@ -118,9 +137,70 @@ function M.is_scoop_order_set() return scoop_order_set end
 function M.conflict_info(name) return scoop_to_conflict[name] end
 function M.blocked_by_mains(name) return side_blocked_by[name] end
 
--- A scoop is "active" for blocking purposes when unlocked but not done.
+-- A scoop can end without being completed: every survivor it is about is
+-- dead, so there is nobody left to rescue. Derived each call rather than
+-- latched, because the census un-sets death_seen when a survivor is seen
+-- alive again -- loading a save from before the death has to undo this too.
+--
+-- The multi-survivor scoops (Lovers, Twin Sisters, Gun Shop Standoff and the
+-- rest) share one END flag across everyone in them, so one death is not
+-- enough -- anybody still breathing keeps the mission worth running.
+--
+-- PSYCHO MODE will invert this: killing is the objective, so a rescue fails
+-- the scoop and a zombie death fails it too. Only which event resolves the
+-- scoop changes -- everything downstream of is_failed stays as it is.
+function M.is_failed(name)
+    -- Survivor scoops only. A Psychopath scoop completes by killing the
+    -- psycho ("Kill Cliff"), so its hostages all dying leaves the check
+    -- perfectly winnable and must not resolve it. That holds in Psycho Mode
+    -- too -- the psycho is still the objective there.
+    local d = cfg.scoop_data[name]
+    if not d or d.category ~= "Survivor" then return false end
+    local roster = cfg.scoop_survivors[name]
+    if not roster or #roster == 0 then return false end
+    if M.completed[name] then return false end
+
+    if cfg.psycho_mode then
+        -- Inverted: the scoop is lost the moment ANY target stops being
+        -- killable, because every one of them is a check. A rescue puts them
+        -- out of reach in the Security Room; a death by zombie or psychopath
+        -- is a kill that will never be credited.
+        for _, stype in ipairs(roster) do
+            if cfg.survivor_rescued(stype) then return true end
+            if cfg.survivor_dead(stype)
+                and not cfg.survivor_killed_by_player(stype) then
+                return true
+            end
+        end
+        return false
+    end
+
+    for _, stype in ipairs(roster) do
+        if not cfg.survivor_dead(stype) then return false end
+    end
+    return true
+end
+
+--- Psycho Mode's completion test: every target dead by the player's hand.
+--- Returns false outside Psycho Mode, where rescues complete scoops instead.
+function M.is_psycho_complete(name)
+    if not cfg.psycho_mode then return false end
+    local d = cfg.scoop_data[name]
+    if not d or d.category ~= "Survivor" then return false end
+    local roster = cfg.scoop_survivors[name]
+    if not roster or #roster == 0 then return false end
+    for _, stype in ipairs(roster) do
+        if not cfg.survivor_killed_by_player(stype) then return false end
+    end
+    return true
+end
+
+-- A scoop is "active" for blocking purposes when unlocked and unresolved.
+-- A failed scoop must stop asserting everything a live one does: its
+-- direction box, its flags, and the hold it has on its conflict siblings.
 local function is_active(name)
     return M.received[name] == true and not M.completed[name]
+        and not M.is_failed(name)
 end
 M.is_active = is_active
 
@@ -221,6 +301,14 @@ function M.set_any_order(v)
     cfg.any_order = v == true
 end
 
+--- Read sides of the config the scoops window needs to explain a block.
+--- Exposed rather than rebuilt there: two copies of "which areas does this
+--- scoop need" would drift.
+function M.is_split_keys() return cfg.split_keys == true end
+function M.region_requirements(name) return cfg.region_requirements[name] or {} end
+function M.split_key_doors(name) return cfg.split_key_doors[name] or {} end
+function M.has_item(name) return cfg.has_item(name) == true end
+
 function M.set_split_keys(v)
     cfg.split_keys = v == true
 end
@@ -247,6 +335,11 @@ function M.main_scoop_blocker(scoop_name)
     local active = M.active_main_scoop()
     if active then return string.format("'%s' is still running", active) end
 
+    if cfg.main_unlock_hold then
+        local ok, why = pcall(cfg.main_unlock_hold, scoop_name)
+        if ok and why then return why end
+    end
+
     for _, code in ipairs(cfg.region_requirements[scoop_name] or {}) do
         if not cfg.can_reach_area(code) then
             return "cannot get there yet"
@@ -262,6 +355,30 @@ function M.main_scoop_blocker(scoop_name)
     return nil
 end
 
+--- Can the player physically get to this scoop and open its doors?
+---
+--- The region and split-key questions main_scoop_blocker asks, without the
+--- checks that short-circuit them. blocker() answers "already running" or
+--- "not in any-order mode" and never reaches the region tests, so the UI
+--- cannot use it to tell "you could get there, something is just in the way"
+--- apart from "you cannot get there at all".
+---
+--- Deliberately not gated on any_order: a chain run wants the same split, so
+--- that blue means one thing everywhere -- you cannot reach it.
+function M.main_scoop_reachable(scoop_name)
+    if not ap_activated then return false end
+    if not M.ap_received[scoop_name] then return false end
+    for _, code in ipairs(cfg.region_requirements[scoop_name] or {}) do
+        if not cfg.can_reach_area(code) then return false end
+    end
+    if cfg.split_keys then
+        for _, key in ipairs(cfg.split_key_doors[scoop_name] or {}) do
+            if not cfg.has_item(key) then return false end
+        end
+    end
+    return true
+end
+
 --- Main scoops in order, each with what the UI needs to draw a row.
 function M.main_scoop_menu()
     local out = {}
@@ -274,6 +391,30 @@ function M.main_scoop_menu()
             held = M.ap_received[name] == true,
             blocker = M.main_scoop_blocker(name),
         }
+    end
+    return out
+end
+
+--- Where an any-order run stands, for the scoops tab and the guide box.
+---
+--- One answer for both, so the tab cannot say "start one" while the box says
+--- "wait". `running` is the main the player started; with none running,
+--- `startable` holds the ones Start would accept now, `stuck` the ones held
+--- but not startable, and `remaining` counts every unfinished main.
+function M.any_order_status()
+    local out = { running = M.active_main_scoop(), startable = {}, stuck = {},
+                  remaining = 0 }
+    for _, name in ipairs(M.scoop_order) do
+        if not M.completed[name] then
+            out.remaining = out.remaining + 1
+            if not out.running and M.ap_received[name] then
+                if M.main_scoop_blocker(name) == nil then
+                    out.startable[#out.startable + 1] = name
+                else
+                    out.stuck[#out.stuck + 1] = name
+                end
+            end
+        end
     end
     return out
 end
@@ -380,6 +521,22 @@ function M.request_unlock(scoop_name)
     end
 
     if M.received[scoop_name] then return true, nil end
+
+    -- A completed scoop whose completion cleared its flag stays cleared for
+    -- the rest of that run. The connect replay re-requests every received
+    -- scoop after a launch, and running the unlock writes again here raised
+    -- flag 309 on every launch, so the Special Forces the player had already
+    -- cleared came back each time the game was started (tester report); the
+    -- same write would put Cletus's 810 back over Gun Shop Standoff. Counted
+    -- as received so the rest of the state machine sees it the same way,
+    -- with no flag written. A new run reopens Cletus (deactivate_for_reload)
+    -- so he comes back there like every other psychopath.
+    if M.completed[scoop_name] and scoop.clear_on_complete then
+        M.received[scoop_name] = true
+        cfg.log(string.format("'%s' is completed and clears on completion -- unlock not re-run",
+            scoop_name))
+        return true, nil
+    end
 
     if not ap_activated then
         cfg.log(string.format("Activation deferred: '%s' -- waiting for Meet Jessie", scoop_name))
@@ -505,15 +662,24 @@ local function try_advance_conflict_group(completed_name)
     local info = scoop_to_conflict[completed_name]
     if not info then return end
 
-    for _, member in ipairs(info.members) do
+    -- Pick the pending member the multiworld granted FIRST, not the first
+    -- in the group's list order -- an unlock order of day 2, day 3, day 1
+    -- should play day 3 after day 2 completes (field report 2026-08-21).
+    -- Members without a recorded ordinal (restored older state) fall back
+    -- behind ordered ones, keeping relative list order among themselves.
+    local best, best_seq
+    for i, member in ipairs(info.members) do
         if member ~= completed_name and M.ap_received[member] and not M.completed[member] then
-            if not M.received[member] then
-                cfg.log(string.format("Conflict group '%s': '%s' completed -> unlocking '%s'",
-                    info.group, completed_name, member))
-                M.request_unlock(member)
+            local seq = ap_receipt_seq[member] or (1e9 + i)
+            if not best or seq < best_seq then
+                best, best_seq = member, seq
             end
-            return
         end
+    end
+    if best and not M.received[best] then
+        cfg.log(string.format("Conflict group '%s': '%s' completed -> unlocking '%s' (receipt order)",
+            info.group, completed_name, best))
+        M.request_unlock(best)
     end
 end
 
@@ -557,7 +723,17 @@ end
 -- AP item receipt / activation / milestones
 ------------------------------------------------------------
 
+--- The order the multiworld granted this scoop in this session (replay on
+--- connect rebuilds it in server order), or nil if never received.
+function M.receipt_seq(scoop_name)
+    return ap_receipt_seq[scoop_name]
+end
+
 function M.mark_ap_received(scoop_name)
+    if not ap_receipt_seq[scoop_name] then
+        ap_receipt_counter = ap_receipt_counter + 1
+        ap_receipt_seq[scoop_name] = ap_receipt_counter
+    end
     M.ap_received[scoop_name] = true
 end
 
@@ -639,6 +815,8 @@ end
 ------------------------------------------------------------
 
 function M.reset_all()
+    clear_table(ap_receipt_seq)
+    ap_receipt_counter = 0
     clear_table(M.ap_received)
     clear_table(M.received)
     clear_table(M.completed)
@@ -704,6 +882,38 @@ function M.deactivate_for_reload()
     if cleared > 0 then
         cfg.log(string.format("Cleared %d side scoop unlocks for pre-Jessie state", cleared))
     end
+
+    -- A pre-Jessie world is a NEW world: every survivor is back where they
+    -- started. Their scoops' completion was persisted with the seed, so
+    -- without this a second game on the same seed restored "A Woman in
+    -- Despair" as done, the enforcement loop skipped re-enabling its flags
+    -- (801, and 295 which Simone checks before following), and she could
+    -- never be recruited again -- rescued once per seed, never after.
+    --
+    -- Survivor scoops, and the scoops whose completion clears their flag
+    -- (Cletus), since request_unlock will not re-run a completed one of
+    -- those and he is meant to come back in a new run like every other
+    -- psychopath. The check itself stays sent in the ledger, so a second
+    -- rescue or kill is harmless and sends nothing. Main scoops keep their
+    -- completion (the chain depends on it), the other psychopaths keep
+    -- theirs and are re-unlocked by the flush anyway, and a scoop marked
+    -- keep_completed_on_new_game stays done: the Special Forces, once sent
+    -- home, are not brought back by a new run.
+    local reopened = 0
+    for scoop_name in pairs(M.completed) do
+        local data = cfg.scoop_data[scoop_name]
+        if data and not data.keep_completed_on_new_game
+            and (data.category == "Survivor" or data.clear_on_complete) then
+            M.completed[scoop_name] = nil
+            M.completion_times[scoop_name] = nil
+            reopened = reopened + 1
+        end
+    end
+    if reopened > 0 then
+        cfg.log(string.format("Reopened %d completed scoop(s) for the new world", reopened))
+    end
+    -- Let the modules that remember rescues know the world is new too.
+    if cfg.on_world_reset then pcall(cfg.on_world_reset) end
     cfg.on_state_changed()
     return cleared
 end
